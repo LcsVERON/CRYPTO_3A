@@ -27,14 +27,14 @@ def baby_step_giant_step(g, h, p):
     
     g_t_inv = pow (g, -t, p) #on calcule l'inverse de g^t
     
-    grand_pas = h
+    grand_pas = h #initialisation du grand pas à h
     for k in range (t):
         
-        if grand_pas in petits_pas:
+        if grand_pas in petits_pas: #si grand pas est dans petit pas, alors on retourne k*t + i (h*g^-kt = g^i => x = kt+i)
             i = petits_pas[grand_pas]
             return k*t+i
         
-        grand_pas = (grand_pas * g_t_inv) % p
+        grand_pas = (grand_pas * g_t_inv) % p #sinon, on actualise grand pas en le multipliant par g^-t
         
     return None  #si aucune solution trouvée
 
