@@ -20,7 +20,7 @@ def aes_chiffrement_block(key: bytes, block: bytes) -> bytes:
     return encryptor.update(block) + encryptor.finalize()
 
 
-def chiffrement(m: bytes, key: bytes) -> bytes:
+def chiffrement(m: bytes, key: bytes,) -> bytes:
     """
     Chiffre un message m avec la clé key selon la fonction :
     E(m1 · · · ml, k) = [r, AES_k(r + 1) ⊕ m1, ..., AES_k(r + l) ⊕ ml]
