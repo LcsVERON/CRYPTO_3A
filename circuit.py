@@ -152,11 +152,14 @@ for a in range(2**n):
     for b in range(2**n):
         inputs = {f"IN_A_{i}": (a >> i) & 1 for i in range(n)}
         inputs.update({f"IN_B_{i}": (b >> i) & 1 for i in range(n)})
+
         outputs = evaluate_circuit(G, labels, inputs)
 
-        max_value = max(a, b)
-        max_bits = [(max_value >> i) & 1 for i in range(n)]
+        #reconstruction des valeurs
+        out_a = sum(outputs[f"OUT_A_{i}"] << i for i in range(n))
+        out_b = sum(outputs[f"OUT_B_{i}"] << i for i in range(n))
 
-        assert all(outputs[f"OUT_{i}"] == max_bits[i] for i in range(n)), f"Test failed for a={a}, b={b}"
+        assert out_a == max(a, b), f"erreur max : a={a} b={b} out_a={out_a}"
+        assert out_b == min(a, b), f"erreur min : a={a} b={b} out_b={out_b}"
 
-print("All tests passed for max_8!")
+print("tous les tests passés pour n =", n)
