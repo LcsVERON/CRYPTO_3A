@@ -1,6 +1,6 @@
 import networkx as nx
 
-#fonction qui permet de générer le circuit logique de la fonction max_n
+#fonction qui génère le circuit logique de la fonction max_n
 def generate_max_min_circuit(n):
     G = nx.DiGraph()
     labels = {}
@@ -14,23 +14,25 @@ def generate_max_min_circuit(n):
     for node in in_b:
         labels[node] = "IN_B"
 
-    #comparaison bit par bit
-    greater_bits = []
-    equal_bits = []
+    equal = None #verifie A == B
+    a_greater = None #verifie A > B
 
     for i in reversed(range(n)):
         a_bit = in_a[i]
         b_bit = in_b[i]
 
+        #NOT B
         not_b = f"NOT_B_{i}"
         labels[not_b] = "NOT"
         G.add_edge(b_bit, not_b)
 
-        a_gt_b = f"A_GREATER_B_{i}"
-        labels[a_gt_b] = "AND"
-        G.add_edge(a_bit, a_gt_b)
-        G.add_edge(not_b, a_gt_b)
+        #A > B pour ce bit seul
+        a_greater_b = f"A_GREATER_B_{i}"
+        labels[a_greater_b] = "AND"
+        G.add_edge(a_bit, a_greater_b)
+        G.add_edge(not_b, a_greater_b)
 
+        #A == B pour ce bit seul
         a_xor_b = f"A_XOR_B_{i}"
         labels[a_xor_b] = "XOR"
         G.add_edge(a_bit, a_xor_b)
@@ -40,97 +42,102 @@ def generate_max_min_circuit(n):
         labels[not_a_xor_b] = "NOT"
         G.add_edge(a_xor_b, not_a_xor_b)
 
-        greater_bits.append(a_gt_b)
-        equal_bits.append(not_a_xor_b)
+        if equal is None:
+            #initialisation
+            a_greater = a_greater_b
+            equal = not_a_xor_b
+        else:
+            #nouveau a_greater = (equal AND a_greater_b) XOR a_greater
+            and_node = f"AND_EQUAL_GREATER_{i}"
+            labels[and_node] = "AND"
+            G.add_edge(equal, and_node)
+            G.add_edge(a_greater_b, and_node)
 
-    #comparaison finale
-    greater = greater_bits[0] #variable vérifiant si A>B
-    for i in range(1, n):
-        temp_and = f"TEMP_AND_{i}" #vérifie si A>B et si les bits précédents étaient égaux
-        labels[temp_and] = "AND"
-        G.add_edge(equal_bits[i-1], temp_and)
-        G.add_edge(greater_bits[i], temp_and)
+            or_node = f"OR_GREATER_{i}"
+            labels[or_node] = "XOR"
+            G.add_edge(a_greater, or_node)
+            G.add_edge(and_node, or_node)
 
-        #on crée GREATER OR TEMP_AND avec NOT(NOT(GREATER) AND NOT(TEMP_AND))
-        not_greater = f"NOT_{greater}"
-        not_temp_and = f"NOT_{temp_and}"
+            a_greater = or_node
 
-        labels[not_greater] = "NOT"
-        labels[not_temp_and] = "NOT"
-        G.add_edge(greater, not_greater)
-        G.add_edge(temp_and, not_temp_and)
+            #nouveau equal = (equal AND (A_i == B_i))
+            new_equal = f"AND_EQUAL_{i}"
+            labels[new_equal] = "AND"
+            G.add_edge(equal, new_equal)
+            G.add_edge(not_a_xor_b, new_equal)
 
-        new_greater = f"GREATER_{i}"
-        labels[new_greater] = "AND"
-        G.add_edge(not_greater, new_greater)
-        G.add_edge(not_temp_and, new_greater)
+            equal = new_equal
 
-        greater = new_greater
-
-    #greater contient NOT(NOT(res)) : il est inversé, il faut le ré-inverser pour obtenir le résultat final
-    greater_final = f"NOT_{greater}"
-    labels[greater_final] = "NOT"
-    G.add_edge(greater, greater_final)
-
-    #sélection des bits de sortie
+    #a_greater = 1 si A > B, sinon 0
+    #sélection des bits pour OUT_A et OUT_B
     for i in range(n):
         a_bit = in_a[i]
         b_bit = in_b[i]
 
-        #pour OUT_A (max)
-        a_selected_a = f"A_SELECTED_A_{i}"
-        labels[a_selected_a] = "AND"
-        G.add_edge(greater_final, a_selected_a)
-        G.add_edge(a_bit, a_selected_a)
+        #puur OUT_A (le maximum)
+        not_a_greater = f"NOT_A_GREATER_SELECT_{i}"
+        labels[not_a_greater] = "NOT"
+        G.add_edge(a_greater, not_a_greater)
 
-        not_greater_final = f"NOT_GREATER_FINAL"
-        labels[not_greater_final] = "NOT"
-        if not_greater_final not in labels:  #on le crée une seule fois
-            G.add_edge(greater_final, not_greater_final)
+        a_and = f"A_AND_SELECT_{i}"
+        labels[a_and] = "AND"
+        G.add_edge(a_greater, a_and)
+        G.add_edge(a_bit, a_and)
 
-        b_selected_a = f"B_SELECTED_A_{i}"
-        labels[b_selected_a] = "AND"
-        G.add_edge(not_greater_final, b_selected_a)
-        G.add_edge(b_bit, b_selected_a)
+        b_and = f"B_AND_SELECT_{i}"
+        labels[b_and] = "AND"
+        G.add_edge(not_a_greater, b_and)
+        G.add_edge(b_bit, b_and)
 
-        out_bit_a = f"OUT_A_{i}"
-        labels[out_bit_a] = "XOR"
-        G.add_edge(a_selected_a, out_bit_a)
-        G.add_edge(b_selected_a, out_bit_a)
-        labels[out_bit_a] = "OUT_A"
-        #si A>B, on sélectionne les bits de A, sinon ceux de B
+        xor_out_a = f"XOR_OUT_A_{i}"
+        labels[xor_out_a] = "XOR"
+        G.add_edge(a_and, xor_out_a)
+        G.add_edge(b_and, xor_out_a)
 
-        #pour OUT_B (min)
-        a_selected_b = f"A_SELECTED_B_{i}"
-        labels[a_selected_b] = "AND"
-        G.add_edge(not_greater_final, a_selected_b)
-        G.add_edge(a_bit, a_selected_b)
-
-        b_selected_b = f"B_SELECTED_B_{i}"
-        labels[b_selected_b] = "AND"
-        G.add_edge(greater_final, b_selected_b)
-        G.add_edge(b_bit, b_selected_b)
-
-        out_bit_b = f"OUT_B_{i}"
-        labels[out_bit_b] = "XOR"
-        G.add_edge(a_selected_b, out_bit_b)
-        G.add_edge(b_selected_b, out_bit_b)
-        labels[out_bit_b] = "OUT_B"
-        #si A>B, on sélectionne les bits de B, sinon ceux de A
-
-    return G, labels #on retourne le circuit final et les labels associés
+        out_a = f"OUT_A_{i}"
+        labels[out_a] = "OUT_A"
+        G.add_edge(xor_out_a, out_a)
 
 
-#fonction qui permet d'évaluer un circuit logique
+        #pour OUT_B (le minimum donc on inverse la condition)
+        a_less_or_equal = f"A_LESS_SELECT_{i}"  # = NOT (A > B)
+        labels[a_less_or_equal] = "NOT"
+        G.add_edge(a_greater, a_less_or_equal)
+
+        a_and_min = f"A_AND_MIN_SELECT_{i}"
+        labels[a_and_min] = "AND"
+        G.add_edge(a_less_or_equal, a_and_min)
+        G.add_edge(a_bit, a_and_min)
+
+        b_and_min = f"B_AND_MIN_SELECT_{i}"
+        labels[b_and_min] = "AND"
+        G.add_edge(a_greater, b_and_min)
+        G.add_edge(b_bit, b_and_min)
+
+        xor_out_b = f"XOR_OUT_B_{i}"
+        labels[xor_out_b] = "XOR"
+        G.add_edge(a_and_min, xor_out_b)
+        G.add_edge(b_and_min, xor_out_b)
+
+        out_b = f"OUT_B_{i}"
+        labels[out_b] = "OUT_B"
+        G.add_edge(xor_out_b, out_b)
+
+
+    return G, labels
+
+#fonction qui évalue le circuit logique
 def evaluate_circuit(G, labels, inputs):
     values = inputs.copy()
     order = list(nx.topological_sort(G))
 
     for node in order:
+        preds = list(G.predecessors(node))
+        
         if node in values:
             continue
         label = labels[node]
-        preds = list(G.predecessors(node))
+        
         if label == "NOT":
             values[node] = 1 - values[preds[0]]
         elif label == "AND":
@@ -143,11 +150,17 @@ def evaluate_circuit(G, labels, inputs):
     outputs = {node: values[node] for node in labels if labels[node] in {"OUT_A", "OUT_B"}}
     return outputs
 
-#test pour n = 8
+#fonctions de conversion entre int et bits
+def int_to_bits(x, n):
+    return [(x >> i) & 1 for i in range(n)]
+
+def bits_to_int(bits):
+    return sum(bit << i for i, bit in enumerate(bits))
+
+#Test exhaustif pour n=8
 n = 8
 G, labels = generate_max_min_circuit(n)
 
-#test exhaustif
 for a in range(2**n):
     for b in range(2**n):
         inputs = {f"IN_A_{i}": (a >> i) & 1 for i in range(n)}
@@ -155,11 +168,10 @@ for a in range(2**n):
 
         outputs = evaluate_circuit(G, labels, inputs)
 
-        #reconstruction des valeurs
-        out_a = sum(outputs[f"OUT_A_{i}"] << i for i in range(n))
-        out_b = sum(outputs[f"OUT_B_{i}"] << i for i in range(n))
+        out_a = bits_to_int([outputs[f"OUT_A_{i}"] for i in range(n)])
+        out_b = bits_to_int([outputs[f"OUT_B_{i}"] for i in range(n)])
 
-        assert out_a == max(a, b), f"erreur max : a={a} b={b} out_a={out_a}"
-        assert out_b == min(a, b), f"erreur min : a={a} b={b} out_b={out_b}"
+        assert out_a == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
+        assert out_b == min(a, b), f"erreur min: a={a} b={b} => out_b={out_b}, attendu={min(a, b)}"
 
-print("tous les tests passés pour n =", n)
+print("tous les tests sont passés avec succès sur 8 bits.")
