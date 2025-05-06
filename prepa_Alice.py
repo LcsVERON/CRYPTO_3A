@@ -1,19 +1,31 @@
 import os
 import random
-from aes import chiffrement  # Fonction personnalisée de chiffrement AES (probablement en mode CTR)
+from aes import chiffrement  
+from AlGamal_OT import Bob_prepare, elgamal_encrypt, elgamal_decrypt, generate_group
 from collections import defaultdict
 
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
+from Crypto.Util.number import bytes_to_long
+
+# Description du format des données envoyées par Alice à Bob : 
+# 
+# key_map : Clés AES associées à chaque nœud et valeur booléenne.
+# garbled_tables : Tables de vérité brouillées pour chaque porte logique, mélangées pour garantir la confidentialité. 
 
 # Génère une clé AES aléatoire de 128 bits (16 octets)
 def generate_random_key():
     return os.urandom(16)
 
 # Fonction principale : Alice prépare le circuit logique sous forme brouillée
+# Supposons que l'OT est déjà implémenté comme tu l'as montré
+
 def alice_prepare_circuit(G, labels):
-    key_map = {}         # Dictionnaire pour stocker les clés associées à chaque (noeud, bit)
-    garbled_tables = {}  # Dictionnaire pour stocker la table brouillée de chaque porte
+    key_map = {}         
+    garbled_tables = {}  
+
+    # === Étape 0 : Génération des paramètres du groupe ===
+    p, g, C = generate_group()  # Alice génère les paramètres du groupe
 
     # === Étape 1 : Génération des clés ===
     for node in G.nodes:
@@ -22,69 +34,100 @@ def alice_prepare_circuit(G, labels):
         if label in {"OUT_B"}:
             continue
         # Ne pas générer de clés pour les entrées (Alice et Bob les reçoivent à part)
-        if label not in {"IN_A", "IN_B", "OUT_A"}:
-            # Génère deux clés : une pour la valeur 0 et une pour la valeur 1
-            key_map[(node, 0)] = generate_random_key()
-            key_map[(node, 1)] = generate_random_key()
+        if label not in {"OUT_A", "OUT_B"}:
+            # Pour chaque entrée de Bob (λ(i) = IN B), on engage un OT
+            if label == "IN_B":
+                # Bob choisit un bit b (soit 0 soit 1)
+                b = random.choice([0, 1])
+
+                # Alice prépare deux clés K0 et K1 pour chaque entrée de Bob
+                K0 = generate_random_key()
+                K1 = generate_random_key()
+
+                # Alice engage un protocole OT pour chaque entrée de Bob
+                a, A0, A1 = Bob_prepare(p, g, C, b)  # Bob choisit b
+
+                # Alice chiffre les deux messages (les clés) avec A0 et A1
+                c0, c1 = elgamal_encrypt(p, g, A0, A1, K0, K1)
+
+                # Bob reçoit la clé qu'il a choisie à partir de OT
+                c_b = c0 if b == 0 else c1
+                key_map[(node, b)] = elgamal_decrypt(p, a, c_b)
+            else:
+                # Pour les autres nœuds, Alice génère simplement des clés
+                key_map[(node, 0)] = generate_random_key()
+                key_map[(node, 1)] = generate_random_key()
 
     # === Étape 2 : Construction des tables brouillées ===
+    # Parcourt chaque nœud du circuit
     for node in G.nodes:
         label = labels[node]
 
-        # Cas des portes AND et XOR (2 entrées)
         if label in {"AND", "XOR"}:
-            preds = list(G.predecessors(node))  # Récupère les deux parents du nœud
-            # Si la sortie est OUT_B, on la traite séparément (probablement pour l'envoi à Bob)
+            preds = list(G.predecessors(node))
+
+            # Vérifie si l'un des successeurs du nœud est une sortie Bob ("OUT_B")
+            # Si oui, on passe au nœud suivant (cette étape évite de générer la table pour ce nœud)
             if any(labels[child] == "OUT_B" for child in G.successors(node)):
                 continue
 
-            # Récupère les clés de sortie de la porte
-            k0, k1 = key_map[(node, 0)], key_map[(node, 1)]
-            # Récupère les clés des bits 0 et 1 des deux entrées
+            # Récupère les clés des prédécesseurs pour les entrées x et y de la porte
             pk0 = key_map[(preds[0], 0)]
             pk1 = key_map[(preds[0], 1)]
             qk0 = key_map[(preds[1], 0)]
             qk1 = key_map[(preds[1], 1)]
 
+            # Initialise la liste qui contiendra les valeurs de la table brouillée pour ce nœud
             table = []
 
-            # Pour chaque combinaison (x, y) d'entrées binaires possibles
+            # Parcourt toutes les combinaisons possibles des entrées x et y
             for x in [0, 1]:
                 for y in [0, 1]:
-                    # Calcule la sortie attendue de la porte
+                    # Calcule la sortie attendue pour la porte logique (AND ou XOR)
                     out = x & y if label == "AND" else x ^ y
-                    k_out = key_map[(node, out)]  # Clé associée à la sortie
 
-                    # Double chiffrement : d'abord avec clé d'entrée x, puis avec clé d'entrée y
-                    first_layer = chiffrement(key=pk0 if x == 0 else pk1, plaintext=k_out)
-                    double_layer = chiffrement(key=qk0 if y == 0 else qk1, plaintext=first_layer)
+                    # Récupère la clé associée au resultat 
+                    k_out = key_map[(node, out)]
 
-                    table.append(double_layer)  # Ajoute à la table
+                    # Effectue un double chiffrement : d'abord avec la clé pk0 ou pk1 pour x, puis avec qk0 ou qk1 pour y
+                    first_layer = chiffrement(k_out, pk0 if x == 0 else pk1)
+                    double_layer = chiffrement(first_layer, qk0 if y == 0 else qk1)
 
-            random.shuffle(table)  # Mélange l'ordre des lignes pour cacher la structure
-            garbled_tables[node] = table  # Enregistre la table pour ce nœud
+                    # Ajoute le résultat du double chiffrement à la table
+                    table.append(double_layer)
 
-        # Cas des portes NOT (1 seule entrée)
+            # Mélange les entrées de la table 
+            random.shuffle(table)
+
+            # Enregistre la table brouillée pour le nœud actuel dans le dictionnaire des tables
+            garbled_tables[node] = table
+
         elif label == "NOT":
             preds = list(G.predecessors(node))
-            if any(labels[child] == "OUT_B" for child in G.successors(node)):
-                continue  # Cas spécial traité plus tard
 
-            # Clés d'entrée
+            # Vérifie si l'un des successeurs du nœud est une sortie Bob ("OUT_B")
+            # Si oui, on passe au nœud suivant (cette étape évite de générer la table pour ce nœud)
+            if any(labels[child] == "OUT_B" for child in G.successors(node)):
+                continue
+
+            # Récupère les clés des prédécesseurs pour l'entrée x de la porte NOT
             pk0 = key_map[(preds[0], 0)]
             pk1 = key_map[(preds[0], 1)]
 
-            # Clés de sortie
+            # Récupère les clés associées à la sortie de la porte NOT
             k0 = key_map[(node, 0)]
             k1 = key_map[(node, 1)]
 
-            # Chiffre la sortie inversée (NOT)
-            c0 = chiffrement(pk0, k1)  # NOT(0) = 1 → chiffré avec clé d'entrée 0
-            c1 = chiffrement(pk1, k0)  # NOT(1) = 0 → chiffré avec clé d'entrée 1
+            # chiffrement avec les clés appropriées pour la porte NOT
+            c0 = chiffrement(k1, pk0)  # Chiffrement pour la sortie 0
+            c1 = chiffrement(k0, pk1)  # Chiffrement pour la sortie 1
 
+            # Crée la table contenant les deux résultats possibles de la porte NOT
             table = [c0, c1]
-            random.shuffle(table)  # Mélange la table
-            garbled_tables[node] = table  # Enregistre la table
 
-    # Retourne le dictionnaire des clés et les tables brouillées prêtes à être envoyées
+            random.shuffle(table)
+
+            # Enregistre la table brouillée pour le nœud actuel dans le dictionnaire des tables
+            garbled_tables[node] = table
+
     return key_map, garbled_tables
