@@ -72,7 +72,13 @@ def dechiffrement(ciphertext: bytes, key: bytes) -> bytes:
         decrypted_blocks.append(xor_bytes(aes_output, block))  # XOR avec c_i
     
     # 3. Retirer le padding si nécessaire
-    return b''.join(decrypted_blocks).rstrip(b'\x00')
+    plaintext = b''.join(decrypted_blocks).rstrip(b'\x00')
+
+    if not plaintext.startswith(b'MSG:'):
+        raise ValueError("Le texte déchiffré semble invalide (entête manquante)")
+
+    return plaintext
+
 
 # Exemple d'utilisation
 key = os.urandom(16)  # Clé secrète de 16 octets

@@ -20,9 +20,11 @@ def generate_random_key():
 # Fonction principale : Alice prépare le circuit logique sous forme brouillée
 # Supposons que l'OT est déjà implémenté comme tu l'as montré
 
-def alice_prepare_circuit(G, labels):
+def alice_prepare_circuit(G, labels, inputs_b): # le b c'est l'entrée de Bob 
     key_map = {}         
     garbled_tables = {}  
+
+    cpt = 0
 
     # === Étape 0 : Génération des paramètres du groupe ===
     p, g, C = generate_group()  # Alice génère les paramètres du groupe
@@ -37,22 +39,21 @@ def alice_prepare_circuit(G, labels):
         if label not in {"OUT_A", "OUT_B"}:
             # Pour chaque entrée de Bob (λ(i) = IN B), on engage un OT
             if label == "IN_B":
-                # Bob choisit un bit b (soit 0 soit 1)
-                b = random.choice([0, 1])
 
                 # Alice prépare deux clés K0 et K1 pour chaque entrée de Bob
                 K0 = generate_random_key()
                 K1 = generate_random_key()
 
                 # Alice engage un protocole OT pour chaque entrée de Bob
-                a, A0, A1 = Bob_prepare(p, g, C, b)  # Bob choisit b
+                a, A0, A1 = Bob_prepare(p, g, C, inputs_b[cpt])  # Bob choisit b
 
                 # Alice chiffre les deux messages (les clés) avec A0 et A1
                 c0, c1 = elgamal_encrypt(p, g, A0, A1, K0, K1)
 
                 # Bob reçoit la clé qu'il a choisie à partir de OT
-                c_b = c0 if b == 0 else c1
-                key_map[(node, b)] = elgamal_decrypt(p, a, c_b)
+                c_b = c0 if inputs_b[cpt] == 0 else c1
+                key_map[(node, inputs_b[cpt])] = elgamal_decrypt(p, a, c_b)
+                cpt+=1
             else:
                 # Pour les autres nœuds, Alice génère simplement des clés
                 key_map[(node, 0)] = generate_random_key()
@@ -99,7 +100,7 @@ def alice_prepare_circuit(G, labels):
             # Mélange les entrées de la table 
             random.shuffle(table)
 
-            # Enregistre la table brouillée pour le nœud actuel dans le dictionnaire des tables
+            # Enregistre la table brouillée pour le nœud actuel dans le dictionnaire des tables 
             garbled_tables[node] = table
 
         elif label == "NOT":

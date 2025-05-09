@@ -1,7 +1,8 @@
 from Crypto.Util.number import getPrime, inverse
 import random
 
-def generate_group(bits=256):
+# genere le groupe 
+def Alice_prepare(bits=256):
     p=getPrime(bits)
     g= random.randint(2,p-2)
     c=random.randint(2,p-2)
@@ -15,27 +16,28 @@ def Bob_prepare(p,g,c,b):
         return a, Ab, A1b                
     else:
         return a, A1b, Ab
-    
-def elgamal_encrypt(p,g,A0,A1,m0,m1):
-    r0 = random.randint(1,p-2)
-    c0_1=pow(g,r0,p)
-    c0_2=(m0*pow(A0,r0,p))%p
-    
-    r1=random.randint(1,p-2)
-    c1_1=pow(g,r1,p)
-    c1_2 = (m1 * pow(A1, r1, p)) % p
 
-    return (c0_1, c0_2), (c1_1, c1_2)
+# Alice a les 2 clés publique (avec la "fausse" comprise)     
+def elgamal_encrypt(p,g,A0,A1,m0,m1):
+    b0 = random.randint(1,p-2)
+    B0=pow(g,b0,p)
+    c0=(m0*pow(A0,b0,p))%p
     
-def elgamal_decrypt(p,a,c):
-    c1,c2 = c
-    s=pow(c1,a,p)
-    m=(c2*inverse(s,p))%p
+    b1=random.randint(1,p-2)
+    B1=pow(g,b1,p)
+    c1 = (m1 * pow(A1, b1, p)) % p
+
+    return (B0, c0), (B1, c1)
+
+# Bob déchiffre avec a qui est la clé privé, B utile dans les calculs pour retrouver m, c est le texte chiffré
+def elgamal_decrypt(p,a,B,c):
+    s=pow(B,a,p)
+    m=(c*inverse(s,p))%p
     return m
 
 if __name__ == "__main__":
     # Alice choisit les paramètres du groupe
-    p, g, C = generate_group()
+    p, g, C = Alice_prepare()
 
     # Alice choisit ses deux messages
     m0 = 4321
@@ -44,7 +46,7 @@ if __name__ == "__main__":
     # Bob choisit un bit b (0 ou 1)
     b = 0  # il veut recevoir m1
 
-    # Bob prépare les clés à envoyer à Alice
+    # Bob prépare les clés à envoyer à Alice, un des deux est une "fausse clé" (une dont il ne connait pas la clé privé)
     a, A0, A1 = Bob_prepare(p, g, C, b)
 
     # Alice chiffre les deux messages avec A0 et A1
@@ -52,7 +54,7 @@ if __name__ == "__main__":
 
     # Bob déchiffre seulement le message qu’il a choisi
     c_b = c0 if b == 0 else c1
-    recu = elgamal_decrypt(p, a, c_b)
+    recu = elgamal_decrypt(p, a, c_b[0], c_b[1])
 
     print(f"Bob a choisi b = {b}")
     print(f"Message reçu par Bob : {recu}")
