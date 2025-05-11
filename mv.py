@@ -37,7 +37,17 @@ class VirtualMachine:
     def run(self):
         max_cycles = 10000
         cycle = 0
+        #print(self.alice_code)
         while not self.finished and cycle < max_cycles:
+            print("Variables d'Alice :", self.alice_vars)
+            print("Variables de Bob :", self.bob_vars)
+            print("Tampon d'Alice vers Bob ")
+            print(self.buffer_ab)
+            print("Tampon de Bob vers Alice ")
+            print(self.buffer_ba)
+            print("commande en cours d'Alice :", self.alice_code[self.alice_pc] if self.alice_pc < len(self.alice_code) else "Fin")
+            print("commande en cours de Bob :", self.bob_code[self.bob_pc] if self.bob_pc < len(self.bob_code) else "Fin")
+
             cycle += 1
             self.finished = True
             self.alice_waiting = False
@@ -56,6 +66,8 @@ class VirtualMachine:
                 break
 
     def step_alice(self):
+        #print(self.alice_pc)
+        #print(len(self.alice_code))
         if self.alice_pc >= len(self.alice_code):
             return
         cmd = self.alice_code[self.alice_pc]
@@ -85,6 +97,8 @@ class VirtualMachine:
                 return
             val = self.eval_expr(cmd["value"], vars)
             setattr(self, buffer_name, val)
+            print(f"[{side.upper()}] PUSH:", val)
+
 
         elif op == "pop":
             buffer_name = "buffer_ba" if side == "alice" else "buffer_ab"
@@ -94,7 +108,10 @@ class VirtualMachine:
                 else: self.bob_waiting = True
                 return
             vars[cmd["dest"]] = buf_val
+            print(f"[{side.upper()}] POP → {cmd['dest']}:", buf_val)
             setattr(self, buffer_name, None)
+
+
 
         elif op == "push4":
             buffer_name = "buffer_ab" if side == "alice" else "buffer_ba"
@@ -104,6 +121,8 @@ class VirtualMachine:
                 return
             values = [self.eval_expr(v, vars) for v in cmd["values"]]
             setattr(self, buffer_name, tuple(values))
+            print(f"[{side.upper()}] PUSH4:", values)
+
 
         elif op == "pop4":
             buffer_name = "buffer_ba" if side == "alice" else "buffer_ab"
@@ -117,7 +136,14 @@ class VirtualMachine:
             y2 = self.eval_expr(cmd["y2"], vars)
             result = (y1 * x2 + (1 - y1) * x1 + y2 * x4 + (1 - y2) * x3) & 1
             vars[cmd["dest"]] = result
+            print(f"[{side.upper()}] POP4 → {cmd['dest']}:", {
+                "received": recv_buf,
+                "y1": y1,
+                "y2": y2,
+                "result": result
+            })
             setattr(self, buffer_name, None)
+
 
     def set_variable(self, side, var_name, value):
         if side == "A":
@@ -141,12 +167,12 @@ def compiler(circuit):
         temp_id += 1
         return f"t{temp_id}"
 
-    for node_id in sorted(circuit):
+    for node_id in circuit:
         node = circuit[node_id]
         label = node["label"]
         inputs = node["in"]
 
-        if label == "IN_A":
+        if label.startswith("IN_A"):
             rnd = fresh()
             masked = fresh()
             alice_code.extend([
@@ -157,7 +183,7 @@ def compiler(circuit):
             ])
             bob_code.append(f"xB{node_id} = pop()")
 
-        elif label == "IN_B":
+        elif label.startswith("IN_B"):
             rnd = fresh()
             masked = fresh()
             bob_code.extend([
@@ -168,15 +194,15 @@ def compiler(circuit):
             ])
             alice_code.append(f"xA{node_id} = pop()")
 
-        elif label == "NOT":
+        elif label.startswith ("NOT"):
             alice_code.append(f"xA{node_id} = xA{inputs[0]} + 1")
             bob_code.append(f"xB{node_id} = xB{inputs[0]}")
 
-        elif label == "XOR":
+        elif label.startswith ("XOR"):
             alice_code.append(f"xA{node_id} = xA{inputs[0]} + xA{inputs[1]}")
             bob_code.append(f"xB{node_id} = xB{inputs[0]} + xB{inputs[1]}")
 
-        elif label == "AND":
+        elif label.startswith ("AND"):
             xA, yA = f"xA{inputs[0]}", f"xA{inputs[1]}"
             xB, yB = f"xB{inputs[0]}", f"xB{inputs[1]}"
             r1, r2 = fresh(), fresh()
@@ -194,17 +220,18 @@ def compiler(circuit):
                 f"xB{node_id} = {xB} * {yB} + xB{node_id}"
             ])
 
-        elif label == "OUT_A":
+        elif label.startswith("OUT_A"):
             alice_code.append(f"xA{node_id} = pop()")
             bob_code.append(f"push(xB{inputs[0]})")
 
-        elif label == "OUT_B":
+        elif label.startswith("OUT_B"):
             bob_code.append(f"xB{node_id} = pop()")
             alice_code.append(f"push(xA{inputs[0]})")
 
     alice_structured = [parse_line(line) for line in alice_code]
     bob_structured = [parse_line(line) for line in bob_code]
     return alice_structured, bob_structured
+
 
 def parse_expr(expr):
     expr = expr.strip()
@@ -254,7 +281,7 @@ def extract_circuit(G, labels):
     return circuit
 
 # Exemple d'utilisation avec les circuits
-n=8
+n=1
 G, labels = circuit.generate_max_min_circuit(n)
 print("Labels du circuit :")
 for node, label in labels.items():
@@ -264,19 +291,25 @@ circuit_test = extract_circuit(G, labels)
 
 alice_code, bob_code = compiler(circuit_test)
 
-a = 42  
-b = 100
+a = 1 
+b = 0
 
 a_bits = circuit.int_to_bits(a, n)
 b_bits = circuit.int_to_bits(b, n)
 
-vm = VirtualMachine(alice_code, bob_code)
+vm = VirtualMachine(bob_code, alice_code)
 
-# Initialisation des variables
-for idx, bit in enumerate(a_bits):
-    vm.set_variable("A", f"xA{idx}", bit)
-for idx, bit in enumerate(b_bits):
-    vm.set_variable("B", f"xB{idx}", bit)
+# Initialisation des variables pour Alice et Bob
+alice_input_nodes = [i for i, data in circuit_test.items() if data["label"] == "IN_A"]
+bob_input_nodes = [i for i, data in circuit_test.items() if data["label"] == "IN_B"]
+
+# Associer les bits aux bons indices de nœuds d'entrée
+for idx, node in enumerate(alice_input_nodes):
+    vm.set_variable("A", f"xA{node}", a_bits[idx])  # On associe le bit avec le bon nœud d'entrée pour Alice
+
+for idx, node in enumerate(bob_input_nodes):
+    vm.set_variable("B", f"xB{node}", b_bits[idx])  # On associe le bit avec le bon nœud d'entrée pour Bob
+
 
 # Exécution du programme
 vm.run()
@@ -286,8 +319,12 @@ print(vm.alice_vars)
 print("Variables de Bob :")
 print(vm.bob_vars)
 
-out_a_bits = [vm.get_variable("A", f"xA{i}") for i in range(8)]
-out_b_bits = [vm.get_variable("B", f"xB{i}") for i in range(8)]
+out_a_nodes = [i for i, data in circuit_test.items() if data["label"] == "OUT_A"]
+out_b_nodes = [i for i, data in circuit_test.items() if data["label"] == "OUT_B"]
+
+out_a_bits = [vm.get_variable("A", f"xA{i}") for i in out_a_nodes]
+out_b_bits = [vm.get_variable("B", f"xB{i}") for i in out_b_nodes]
+
 
 out_a = circuit.bits_to_int(out_a_bits)
 out_b = circuit.bits_to_int(out_b_bits)
