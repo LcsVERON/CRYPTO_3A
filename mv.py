@@ -163,9 +163,7 @@ def compiler(circuit):
 
     return alice_structured, bob_structured
 
-
-
-
+# Parse les expressions et les lignes de code
 def parse_expr(expr):
     expr = expr.strip()
     if expr == 'rnd()':
@@ -215,17 +213,19 @@ def parse_line(line):
     
     raise ValueError(f"Unsupported line: {line}")
 
+# Exemple d'extraction du circuit
 def extract_circuit(G, labels):
     circuit = {}
     for node in nx.topological_sort(G):
         label = labels[node]
         preds = list(G.predecessors(node))
-        circuit_id = hash(node) % (10**6)  # ou un simple compteur, ou juste node si c’est un int
+        circuit_id = hash(node) % (10**6)
         circuit[circuit_id] = {
             "label": label,
-            "in": preds  # les identifiants des nœuds d'entrée
+            "in": preds
         }
     return circuit
+
 
 
 # Exemple d'utilisation avec les circuits
