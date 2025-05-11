@@ -4,9 +4,10 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from prepa_Alice import alice_prepare_circuit
+from execution_Bob import bob_evalue_circuit
 from Crypto.Util.number import long_to_bytes
 
-def test_alice_prepare_simple_AND():
+def test_bob_evaluation_simple_AND():
     # === Construire un petit circuit logique : A AND B => OUT_A
     G = nx.DiGraph()
     G.add_edges_from([
@@ -22,26 +23,25 @@ def test_alice_prepare_simple_AND():
         "OUT_A": "OUT_A",
     }
 
-    inputs_b = [1]  # ou 0
+    # Entrée de Bob pour B
+    inputs_b = [1]  # Bob choisit B = 1
 
     key_map, garbled_tables = alice_prepare_circuit(G, labels, inputs_b)
 
-    # === Tests sur key_map ===
-    assert ("A", 0) in key_map
-    assert ("A", 1) in key_map
-    assert ("AND1", 0) in key_map
-    assert ("AND1", 1) in key_map
+    # Bob évalue le circuit
+    result = bob_evalue_circuit(G, key_map, garbled_tables)
 
-    # Bob a deux bits pour B, donc deux entrées
-    assert ("B", 0) in key_map or ("B", 1) in key_map
+    # Ajout de débogage pour vérifier si OUT_A est présent dans les résultats
+    print("Résultats de Bob:", result)
+    assert "OUT_A" in result, "La sortie 'OUT_A' est manquante dans le résultat de l'évaluation."
 
-    # === Tests sur garbled_tables ===
-    assert "AND1" in garbled_tables
-    table = garbled_tables["AND1"]
-    assert len(table) == 4  # 2 entrées => 4 combinaisons possibles
-    assert all(isinstance(x, bytes) for x in table)
+    # Vérification du résultat attendu pour A=0 et B=1 (AND => 0)
+    assert result["OUT_A"] == 0, "Le résultat attendu pour OUT_A est 0."
 
-def test_alice_prepare_NOT_gate():
+    # Le résultat attendu pour A=0 et B=1 (AND => 0)
+    assert result["OUT_A"] == 0  # Résultat attendu
+
+def test_bob_evaluation_NOT_gate():
     # === Circuit : A → NOT → OUT_A
     G = nx.DiGraph()
     G.add_edges_from([
@@ -55,17 +55,20 @@ def test_alice_prepare_NOT_gate():
         "OUT_A": "OUT_A",
     }
 
-    inputs_b = []  # pas d'entrée Bob ici
+    # Entrée de Bob pour A
+    inputs_b = [1]  # Bob choisit A = 1
 
     key_map, garbled_tables = alice_prepare_circuit(G, labels, inputs_b)
 
-    # Vérifie les clés
-    assert ("A", 0) in key_map
-    assert ("A", 1) in key_map
-    assert ("NOT1", 0) in key_map
-    assert ("NOT1", 1) in key_map
+    # Bob évalue le circuit
+    result = bob_evalue_circuit(G, key_map, garbled_tables)
 
-    # Vérifie la table NOT
-    assert "NOT1" in garbled_tables
-    assert len(garbled_tables["NOT1"]) == 2
-    assert all(isinstance(x, bytes) for x in garbled_tables["NOT1"])
+    # Ajout de débogage pour vérifier si OUT_A est présent dans les résultats
+    print("Résultats de Bob:", result)
+    assert "OUT_A" in result, "La sortie 'OUT_A' est manquante dans le résultat de l'évaluation."
+
+    # Vérification du résultat attendu pour A=0 et B=1 (AND => 0)
+    assert result["OUT_A"] == 0, "Le résultat attendu pour OUT_A est 0."
+
+    # Le résultat attendu pour A=1 (NOT => 0)
+    assert result["OUT_A"] == 0  # Résultat attendu

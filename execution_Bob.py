@@ -11,14 +11,23 @@ from Crypto.Util.number import bytes_to_long
 def bob_evalue_circuit(G, key_map, garbled_tables):
 
     outputs = {}
+    keys = {}
+
     order = list(nx.topological_sort(G))
+    print("Ordre topologique du circuit:", order)
 
     for node in order :
         label = G.nodes[node].get("label")  # Correction importante : accéder au label depuis les attributs du graphe
 
         preds = list(G.predecessors(node))
 
+        print(f"Évaluation du nœud {node} avec label {label}, prédécesseurs: {preds}")
+
         if label in {"IN_B", "IN_A"}:
+            # Bob connaît déjà la clé d'entrée via key_map
+            for bit in [0, 1]:
+                if (node, bit) in key_map:
+                    keys[node] = key_map[(node, bit)]
             continue
 
         if label in {"OUT_A", "OUT_B"}:
@@ -26,7 +35,8 @@ def bob_evalue_circuit(G, key_map, garbled_tables):
             pred = preds[0]
             
             # Récupère la clé reçue à ce niveau
-            received_key = key_map.get((pred, 0))
+            #received_key = key_map.get((pred, 0))
+            received_key = keys[pred]
 
             if received_key == key_map.get((node, 0)):
                 outputs[node] = 0
@@ -36,6 +46,10 @@ def bob_evalue_circuit(G, key_map, garbled_tables):
                 raise ValueError(f"Impossible de déterminer la sortie du nœud {node}")
             
         if label in {"AND", "XOR"}:
+            a, b = preds
+            key_a = keys[a]
+            key_b = keys[b]
+
             preds = list(G.predecessors(node))
 
             for gar_bebou in garbled_tables[node]:
@@ -72,6 +86,9 @@ def bob_evalue_circuit(G, key_map, garbled_tables):
 
 
         elif label == "NOT":
+            a = preds[0]
+            key_a = keys[a]
+            
             # Une porte NOT n'a qu'un seul prédécesseur
             pred = list(G.predecessors(node))[0]
 
@@ -97,5 +114,8 @@ def bob_evalue_circuit(G, key_map, garbled_tables):
 
             if not found:
                 raise ValueError(f"Déchiffrement échoué pour la porte NOT au nœud {node}")
+            
+    print("Résultats de l'évaluation:", outputs)      
+    return outputs
 
         

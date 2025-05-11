@@ -24,6 +24,10 @@ def alice_prepare_circuit(G, labels, inputs_b): # le b c'est l'entrée de Bob
     key_map = {}         
     garbled_tables = {}  
 
+    # Initialisation des labels pour chaque nœud dans le graphe
+    for node, label in labels.items():
+        G.nodes[node]['label'] = label
+
     cpt = 0
 
     # === Étape 0 : Génération des paramètres du groupe ===
