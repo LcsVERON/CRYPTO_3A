@@ -139,21 +139,22 @@ def int_to_bits(x, n):
 def bits_to_int(bits):
     return sum(bit << i for i, bit in enumerate(bits))
 
-#Test exhaustif pour n=8
-n = 8
-G, labels = generate_max_min_circuit(n)
+if __name__ == "__main__":
+    #Test exhaustif pour n=8
+    n = 8
+    G, labels = generate_max_min_circuit(n)
 
-for a in range(2**n):
-    for b in range(2**n):
-        inputs = {f"IN_A_{i}": (a >> i) & 1 for i in range(n)}
-        inputs.update({f"IN_B_{i}": (b >> i) & 1 for i in range(n)})
+    for a in range(2**n):
+        for b in range(2**n):
+            inputs = {f"IN_A_{i}": (a >> i) & 1 for i in range(n)}
+            inputs.update({f"IN_B_{i}": (b >> i) & 1 for i in range(n)})
 
-        outputs = evaluate_circuit(G, labels, inputs)
+            outputs = evaluate_circuit(G, labels, inputs)
 
-        out_a = bits_to_int([outputs[f"OUT_A_{i}"] for i in range(n)])
-        out_b = bits_to_int([outputs[f"OUT_B_{i}"] for i in range(n)])
+            out_a = bits_to_int([outputs[f"OUT_A_{i}"] for i in range(n)])
+            out_b = bits_to_int([outputs[f"OUT_B_{i}"] for i in range(n)])
 
-        assert out_a == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
-        assert out_b == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
+            assert out_a == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
+            assert out_b == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
 
-print("tous les tests sont passés avec succès sur 8 bits.")
+    print("tous les tests sont passés avec succès sur 8 bits.")
