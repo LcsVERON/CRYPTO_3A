@@ -74,7 +74,7 @@ def generate_max_min_circuit(n):
         a_bit = in_a[i]
         b_bit = in_b[i]
 
-        #puur OUT_A (le maximum)
+        # pour OUT_A (le maximum)
         not_a_greater = f"NOT_A_GREATER_SELECT_{i}"
         labels[not_a_greater] = "NOT"
         G.add_edge(a_greater, not_a_greater)
@@ -94,34 +94,16 @@ def generate_max_min_circuit(n):
         G.add_edge(a_and, xor_out_a)
         G.add_edge(b_and, xor_out_a)
 
+        # Sortie vers OUT_A (Alice)
         out_a = f"OUT_A_{i}"
         labels[out_a] = "OUT_A"
         G.add_edge(xor_out_a, out_a)
 
-
-        #pour OUT_B (le minimum donc on inverse la condition)
-        a_less_or_equal = f"A_LESS_SELECT_{i}"  # = NOT (A > B)
-        labels[a_less_or_equal] = "NOT"
-        G.add_edge(a_greater, a_less_or_equal)
-
-        a_and_min = f"A_AND_MIN_SELECT_{i}"
-        labels[a_and_min] = "AND"
-        G.add_edge(a_less_or_equal, a_and_min)
-        G.add_edge(a_bit, a_and_min)
-
-        b_and_min = f"B_AND_MIN_SELECT_{i}"
-        labels[b_and_min] = "AND"
-        G.add_edge(a_greater, b_and_min)
-        G.add_edge(b_bit, b_and_min)
-
-        xor_out_b = f"XOR_OUT_B_{i}"
-        labels[xor_out_b] = "XOR"
-        G.add_edge(a_and_min, xor_out_b)
-        G.add_edge(b_and_min, xor_out_b)
-
+        # Sortie vers OUT_B (Bob) - identique à OUT_A
         out_b = f"OUT_B_{i}"
         labels[out_b] = "OUT_B"
-        G.add_edge(xor_out_b, out_b)
+        G.add_edge(xor_out_a, out_b)
+
 
 
     return G, labels
@@ -172,6 +154,6 @@ for a in range(2**n):
         out_b = bits_to_int([outputs[f"OUT_B_{i}"] for i in range(n)])
 
         assert out_a == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
-        assert out_b == min(a, b), f"erreur min: a={a} b={b} => out_b={out_b}, attendu={min(a, b)}"
+        assert out_b == max(a, b), f"erreur max: a={a} b={b} => out_a={out_a}, attendu={max(a, b)}"
 
 print("tous les tests sont passés avec succès sur 8 bits.")
