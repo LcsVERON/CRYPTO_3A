@@ -21,9 +21,9 @@ class VirtualMachine:
 
     def eval_expr(self, expr, context):
         if isinstance(expr, str):
-            if expr == 'rnd()':
+            if expr.strip() == 'rnd()':
                 return random.randint(0, 1)
-            return context.get(expr, 0)
+            return context.get(expr.strip(), 0)
         elif isinstance(expr, tuple):
             op = expr[0]
             if op == '+':
@@ -35,81 +35,90 @@ class VirtualMachine:
         return expr
 
     def run(self):
-        while not self.finished:
+        max_cycles = 10000
+        cycle = 0
+        while not self.finished and cycle < max_cycles:
+            cycle += 1
             self.finished = True
-            # Exécution d'Alice
-            if not self.alice_waiting and self.alice_pc < len(self.alice_code):
+            self.alice_waiting = False
+            self.bob_waiting = False
+
+            if self.alice_pc < len(self.alice_code):
                 self.step_alice()
                 self.finished = False
-            
-            # Exécution de Bob
-            if not self.bob_waiting and self.bob_pc < len(self.bob_code):
+
+            if self.bob_pc < len(self.bob_code):
                 self.step_bob()
                 self.finished = False
 
-            # Synchronisation de l'attente
             if self.alice_waiting and self.bob_waiting:
-                print("Both sides are waiting, checking buffers...")
-                time.sleep(0.1)  # Petite pause pour éviter la surcharge CPU
-
+                print("Deadlock possible: les deux parties attendent.")
+                break
 
     def step_alice(self):
         if self.alice_pc >= len(self.alice_code):
             return
         cmd = self.alice_code[self.alice_pc]
-        self.execute_command(cmd, self.alice_vars, self.buffer_ab, self.buffer_ba, side="alice")
-        self.alice_pc += 1
+        self.execute_command(cmd, self.alice_vars, side="alice")
+        if not self.alice_waiting:
+            self.alice_pc += 1
 
     def step_bob(self):
         if self.bob_pc >= len(self.bob_code):
             return
         cmd = self.bob_code[self.bob_pc]
-        self.execute_command(cmd, self.bob_vars, self.buffer_ba, self.buffer_ab, side="bob")
-        self.bob_pc += 1
+        self.execute_command(cmd, self.bob_vars, side="bob")
+        if not self.bob_waiting:
+            self.bob_pc += 1
 
-    def execute_command(self, cmd, vars, send_buf, recv_buf, side="alice"):
+    def execute_command(self, cmd, vars, side="alice"):
         op = cmd["op"]
-        
-        if op == "push":
-            print(f"[{side}] Push before: send_buf = {send_buf} | buffer_ab = {self.buffer_ab} | buffer_ba = {self.buffer_ba}")
-            if send_buf is not None:
-                # Si le tampon est déjà occupé, mettre l'autre côté en attente
-                if side == "alice":
-                    self.alice_waiting = True
-                else:
-                    self.bob_waiting = True
-                return
-            
-            # Evaluer la valeur à envoyer
-            send_buf = self.eval_expr(cmd["value"], vars)
-            if side == "alice":
-                self.buffer_ab = send_buf
-            else:
-                self.buffer_ba = send_buf
-            print(f"[{side}] Push after: send_buf = {send_buf} | buffer_ab = {self.buffer_ab} | buffer_ba = {self.buffer_ba}")
-        
-        elif op == "pop":
-            print(f"[{side}] Pop before: recv_buf = {recv_buf} | buffer_ab = {self.buffer_ab} | buffer_ba = {self.buffer_ba}")
-            if recv_buf is None:
-                # Vérification si le buffer est vide avant de tenter un pop
-                print(f"[{side}] Pop: Buffer is empty, waiting...")
-                if side == "alice":
-                    self.alice_waiting = True
-                else:
-                    self.bob_waiting = True
-                return
-            
-            # Pop du buffer, mettre la valeur dans la variable
-            vars[cmd["dest"]] = recv_buf
-            print(f"[{side}] Pop after: {cmd['dest']} = {vars[cmd['dest']]} | buffer_ab = {self.buffer_ab} | buffer_ba = {self.buffer_ba}")
-            
-            if side == "alice":
-                self.buffer_ba = None  # Vider le buffer après récupération
-            else:
-                self.buffer_ab = None  # Vider le buffer après récupération
 
-            
-    # Méthodes pour gérer les variables
+        if op == "assign":
+            vars[cmd["dest"]] = self.eval_expr(cmd["expr"], vars)
+
+        elif op == "push":
+            buffer_name = "buffer_ab" if side == "alice" else "buffer_ba"
+            if getattr(self, buffer_name) is not None:
+                if side == "alice": self.alice_waiting = True
+                else: self.bob_waiting = True
+                return
+            val = self.eval_expr(cmd["value"], vars)
+            setattr(self, buffer_name, val)
+
+        elif op == "pop":
+            buffer_name = "buffer_ba" if side == "alice" else "buffer_ab"
+            buf_val = getattr(self, buffer_name)
+            if buf_val is None:
+                if side == "alice": self.alice_waiting = True
+                else: self.bob_waiting = True
+                return
+            vars[cmd["dest"]] = buf_val
+            setattr(self, buffer_name, None)
+
+        elif op == "push4":
+            buffer_name = "buffer_ab" if side == "alice" else "buffer_ba"
+            if getattr(self, buffer_name) is not None:
+                if side == "alice": self.alice_waiting = True
+                else: self.bob_waiting = True
+                return
+            values = [self.eval_expr(v, vars) for v in cmd["values"]]
+            setattr(self, buffer_name, tuple(values))
+
+        elif op == "pop4":
+            buffer_name = "buffer_ba" if side == "alice" else "buffer_ab"
+            recv_buf = getattr(self, buffer_name)
+            if not isinstance(recv_buf, tuple) or len(recv_buf) != 4:
+                if side == "alice": self.alice_waiting = True
+                else: self.bob_waiting = True
+                return
+            x1, x2, x3, x4 = recv_buf
+            y1 = self.eval_expr(cmd["y1"], vars)
+            y2 = self.eval_expr(cmd["y2"], vars)
+            result = (y1 * x2 + (1 - y1) * x1 + y2 * x4 + (1 - y2) * x3) & 1
+            vars[cmd["dest"]] = result
+            setattr(self, buffer_name, None)
+
     def set_variable(self, side, var_name, value):
         if side == "A":
             self.alice_vars[var_name] = value
@@ -122,48 +131,81 @@ class VirtualMachine:
         elif side == "B":
             return self.bob_vars.get(var_name, 0)
 
-
-# Fonction qui permet de "formater" la série d'exécutions de commandes qu'auront à effectuer Alice et Bob
 def compiler(circuit):
     alice_code = []
     bob_code = []
-    
-    for node_id in circuit:
+    temp_id = 0
+
+    def fresh():
+        nonlocal temp_id
+        temp_id += 1
+        return f"t{temp_id}"
+
+    for node_id in sorted(circuit):
         node = circuit[node_id]
         label = node["label"]
-        print(f"Compiling node {node_id} with label {label}")
+        inputs = node["in"]
 
         if label == "IN_A":
-            # Alice choisit un bit aléatoire pour masquer sa donnée et l'envoie à Bob
-            alice_code.append(f"xA{node_id + 7} = rnd()")
-            alice_code.append(f"xA{node_id + 8} = xA{node_id + 7} + xA{node_id}")
-            alice_code.append(f"push(xA{node_id + 8});")
-            alice_code.append(f"xA{node_id} = xA{node_id + 7}")
+            rnd = fresh()
+            masked = fresh()
+            alice_code.extend([
+                f"{rnd} = rnd()",
+                f"{masked} = {rnd} + xA{node_id}",
+                f"push({masked})",
+                f"xA{node_id} = {rnd}"
+            ])
             bob_code.append(f"xB{node_id} = pop()")
-            print(f"[Alice] IN_A: xA{node_id} = {node_id + 7} and xA{node_id + 8}")
-            print(f"[Bob] IN_A: Waiting for pop()")
 
         elif label == "IN_B":
-            # Bob masque sa donnée et l'envoie à Alice
-            bob_code.append(f"xB{node_id + 6} = rnd()")
-            bob_code.append(f"xB{node_id + 7} = xB{node_id + 6} + xB{node_id}")
-            bob_code.append(f"push(xB{node_id + 7});")
-            bob_code.append(f"xB{node_id} = xB{node_id + 6}")
+            rnd = fresh()
+            masked = fresh()
+            bob_code.extend([
+                f"{rnd} = rnd()",
+                f"{masked} = {rnd} + xB{node_id}",
+                f"push({masked})",
+                f"xB{node_id} = {rnd}"
+            ])
             alice_code.append(f"xA{node_id} = pop()")
-            print(f"[Bob] IN_B: xB{node_id} = {node_id + 6} and xB{node_id + 7}")
-            print(f"[Alice] IN_B: Waiting for pop()")
 
-        # Autres opérations (XOR, AND, etc.) suivent le même modèle...
-        
+        elif label == "NOT":
+            alice_code.append(f"xA{node_id} = xA{inputs[0]} + 1")
+            bob_code.append(f"xB{node_id} = xB{inputs[0]}")
+
+        elif label == "XOR":
+            alice_code.append(f"xA{node_id} = xA{inputs[0]} + xA{inputs[1]}")
+            bob_code.append(f"xB{node_id} = xB{inputs[0]} + xB{inputs[1]}")
+
+        elif label == "AND":
+            xA, yA = f"xA{inputs[0]}", f"xA{inputs[1]}"
+            xB, yB = f"xB{inputs[0]}", f"xB{inputs[1]}"
+            r1, r2 = fresh(), fresh()
+            m1, m2 = fresh(), fresh()
+            alice_code.extend([
+                f"{r1} = rnd()",
+                f"{r2} = rnd()",
+                f"{m1} = {r1} + {xA}",
+                f"{m2} = {r2} + {yA}",
+                f"push({r1}, {m1}, {r2}, {m2})",
+                f"xA{node_id} = {xA} * {yA} + {r1} + {r2}"
+            ])
+            bob_code.extend([
+                f"xB{node_id} = pop({xB}, {yB})",
+                f"xB{node_id} = {xB} * {yB} + xB{node_id}"
+            ])
+
+        elif label == "OUT_A":
+            alice_code.append(f"xA{node_id} = pop()")
+            bob_code.append(f"push(xB{inputs[0]})")
+
+        elif label == "OUT_B":
+            bob_code.append(f"xB{node_id} = pop()")
+            alice_code.append(f"push(xA{inputs[0]})")
+
     alice_structured = [parse_line(line) for line in alice_code]
     bob_structured = [parse_line(line) for line in bob_code]
-
-    print(f"Compiled Alice Code: {alice_structured}")
-    print(f"Compiled Bob Code: {bob_structured}")
-
     return alice_structured, bob_structured
 
-# Parse les expressions et les lignes de code
 def parse_expr(expr):
     expr = expr.strip()
     if expr == 'rnd()':
@@ -178,67 +220,55 @@ def parse_expr(expr):
     if '*' in expr:
         parts = expr.split('*')
         return ('*', parts[0].strip(), parts[1].strip())
-    return expr  # Just a variable
-
+    return expr
 
 def parse_line(line):
     line = line.strip().rstrip(';')
-    
-    # push(x)
     if line.startswith("push("):
         inner = line[5:-1].strip()
-        if ',' in inner:  # push(x1, x2, x3, x4)
+        if ',' in inner:
             values = [parse_expr(e.strip()) for e in inner.split(',')]
             return {"op": "push4", "values": values}
         else:
             return {"op": "push", "value": parse_expr(inner)}
-    
-    # x = pop()
     if re.match(r'^\w+\s*=\s*pop\(\)$', line):
         dest = line.split('=')[0].strip()
         return {"op": "pop", "dest": dest}
-    
-    # x = pop(x1, x2)
     m = re.match(r'^(\w+)\s*=\s*pop\(([^,]+),\s*([^)]+)\)$', line)
     if m:
         dest = m.group(1).strip()
         y1 = parse_expr(m.group(2).strip())
         y2 = parse_expr(m.group(3).strip())
         return {"op": "pop4", "dest": dest, "y1": y1, "y2": y2}
-    
-    # x = e (assign)
     if '=' in line:
         dest, expr = line.split('=')
         return {"op": "assign", "dest": dest.strip(), "expr": parse_expr(expr)}
-    
     raise ValueError(f"Unsupported line: {line}")
 
-# Exemple d'extraction du circuit
 def extract_circuit(G, labels):
     circuit = {}
-    for node in nx.topological_sort(G):
+    for i, node in enumerate(nx.topological_sort(G)):
         label = labels[node]
         preds = list(G.predecessors(node))
-        circuit_id = hash(node) % (10**6)
-        circuit[circuit_id] = {
-            "label": label,
-            "in": preds
-        }
+        circuit[i] = {"label": label, "in": preds}
     return circuit
 
-
-
 # Exemple d'utilisation avec les circuits
-G, labels = circuit.generate_max_min_circuit(8)
+n=8
+G, labels = circuit.generate_max_min_circuit(n)
+print("Labels du circuit :")
+for node, label in labels.items():
+    print(f"{node}: {label}")
+
 circuit_test = extract_circuit(G, labels)
 
 alice_code, bob_code = compiler(circuit_test)
 
-a = 42  # première valeur
-b = 100 # deuxième valeur
+a = 42  
+b = 100
 
-a_bits = circuit.int_to_bits(a, 8)
-b_bits = circuit.int_to_bits(b, 8)
+a_bits = circuit.int_to_bits(a, n)
+b_bits = circuit.int_to_bits(b, n)
 
 vm = VirtualMachine(alice_code, bob_code)
 
@@ -250,6 +280,11 @@ for idx, bit in enumerate(b_bits):
 
 # Exécution du programme
 vm.run()
+
+print("Variables d'Alice :")
+print(vm.alice_vars)
+print("Variables de Bob :")
+print(vm.bob_vars)
 
 out_a_bits = [vm.get_variable("A", f"xA{i}") for i in range(8)]
 out_b_bits = [vm.get_variable("B", f"xB{i}") for i in range(8)]
