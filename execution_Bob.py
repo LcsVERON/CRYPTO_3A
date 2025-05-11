@@ -1,7 +1,7 @@
 import random
 import networkx as nx
 from aes import dechiffrement  
-from AlGamal_OT import Bob_prepare, elgamal_encrypt, elgamal_decrypt, generate_group
+from AlGamal_OT import Bob_prepare, elgamal_encrypt, elgamal_decrypt, Alice_prepare
 from collections import defaultdict
 
 from Crypto.Cipher import AES
@@ -14,7 +14,7 @@ def bob_evalue_circuit(G, key_map, garbled_tables):
     order = list(nx.topological_sort(G))
 
     for node in order :
-        label = order[node]
+        label = G.nodes[node].get("label")  # Correction importante : accéder au label depuis les attributs du graphe
 
         preds = list(G.predecessors(node))
 

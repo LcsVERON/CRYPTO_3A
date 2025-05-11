@@ -1,7 +1,7 @@
 import os
 import random
 from aes import chiffrement  
-from AlGamal_OT import Bob_prepare, elgamal_encrypt, elgamal_decrypt, generate_group
+from AlGamal_OT import Bob_prepare, elgamal_encrypt, elgamal_decrypt, Alice_prepare
 from collections import defaultdict
 
 from Crypto.Cipher import AES
@@ -27,7 +27,7 @@ def alice_prepare_circuit(G, labels, inputs_b): # le b c'est l'entrée de Bob
     cpt = 0
 
     # === Étape 0 : Génération des paramètres du groupe ===
-    p, g, C = generate_group()  # Alice génère les paramètres du groupe
+    p, g, C = Alice_prepare()  # Alice génère les paramètres du groupe
 
     # === Étape 1 : Génération des clés ===
     for node in G.nodes:
@@ -52,7 +52,13 @@ def alice_prepare_circuit(G, labels, inputs_b): # le b c'est l'entrée de Bob
 
                 # Bob reçoit la clé qu'il a choisie à partir de OT
                 c_b = c0 if inputs_b[cpt] == 0 else c1
-                key_map[(node, inputs_b[cpt])] = elgamal_decrypt(p, a, c_b)
+                B, c = c_b
+                key_map[(node, inputs_b[cpt])] = elgamal_decrypt(p, a, B, c, as_bytes=True, byte_length=16)
+
+                # Stocker toutes les clés dans key_map pour que Alice puisse construire la table
+                key_map[(node, 0)] = K0
+                key_map[(node, 1)] = K1
+
                 cpt+=1
             else:
                 # Pour les autres nœuds, Alice génère simplement des clés

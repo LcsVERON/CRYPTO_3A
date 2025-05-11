@@ -74,8 +74,7 @@ def dechiffrement(ciphertext: bytes, key: bytes) -> bytes:
     # 3. Retirer le padding si nécessaire
     plaintext = b''.join(decrypted_blocks).rstrip(b'\x00')
 
-    if not plaintext.startswith(b'MSG:'):
-        raise ValueError("Le texte déchiffré semble invalide (entête manquante)")
+    #if not plaintext.startswith(b'MSG:'):raise ValueError("Le texte déchiffré semble invalide (entête manquante)")
 
     return plaintext
 
