@@ -1,52 +1,101 @@
 import math
-import bisect
 
-def trouve_diviseurs(n): #fonction retournant la liste des diviseurs de n différents de 1 et n
-    diviseurs=[d for d in range(2,n) if n%d==0] #liste des diviseurs de p
-    return diviseurs
+def trouve_diviseurs(n):
+    # Retourne les diviseurs propres de n (différents de 1 et n)
+    return [d for d in range(2, n) if n % d == 0]
 
-def est_generateur(g, p): #fonction vérifiant si g génère le groupe multiplicatif du corps F_p
-    ordre = p - 1  #ordre du groupe multiplicatif
+def est_generateur(g, p):
+    # Vérifie si g est un générateur du groupe multiplicatif de F_p
+    ordre = p - 1
     for d in trouve_diviseurs(ordre):
         if pow(g, ordre // d, p) == 1:
-            return False #si l'odre de g est inférieur à p-1, g n'est pas générateur
+            return False
     return True
 
-def trouve_generateurs(p): #fonction retournant la liste des générateurs du groupe multiplicatif de F_p
-    generateurs = [g for g in range(2, p) if est_generateur(g, p)]
-    return generateurs
+def trouve_generateurs(p):
+    # Retourne tous les générateurs du groupe multiplicatif de F_p
+    return [g for g in range(2, p) if est_generateur(g, p)]
 
-def est_premier(n): #fonction vérifiant si n est premier
-    return len(trouve_diviseurs(n))==0
-
+def est_premier(n):
+    # Test naïf de primalité basé sur l'absence de diviseurs propres
+    return len(trouve_diviseurs(n)) == 0
 
 def baby_step_giant_step(g, h, p):
-    t = math.isqrt(p) + 1  #taille des petits pas
+    # Algorithme de Baby-step Giant-step pour résoudre g^x ≡ h mod p
+    t = math.isqrt(p) + 1
+    petits_pas = {pow(g, i, p): i for i in range(t)}
+    g_t_inv = pow(g, -t, p)
     
-    petits_pas = {pow(g, i, p): i for i in range (t)} #on place dans une liste les puissances i de 0 à t de g avec leur indice
-    
-    g_t_inv = pow (g, -t, p) #on calcule l'inverse de g^t
-    
-    grand_pas = h #initialisation du grand pas à h
-    for k in range (t):
-        
-        if grand_pas in petits_pas: #si grand pas est dans petit pas, alors on retourne k*t + i (h*g^-kt = g^i => x = kt+i)
-            i = petits_pas[grand_pas]
-            return k*t+i
-        
-        grand_pas = (grand_pas * g_t_inv) % p #sinon, on actualise grand pas en le multipliant par g^-t
-        
-    return None  #si aucune solution trouvée
+    grand_pas = h
+    for k in range(t):
+        if grand_pas in petits_pas:
+            return k * t + petits_pas[grand_pas]
+        grand_pas = (grand_pas * g_t_inv) % p
+    return None
 
-#tests sur le logarithme discret
-p = 13291 #cardinal du corps fini
-g = trouve_generateurs(p)[0] #générateur (base)
-h = 5 #élément dont on cherche le log discret base g mod p
+# ------------------------- TESTS -------------------------
 
-x = baby_step_giant_step(g, h, p)
-
-if (est_premier(p)):
-    print(f"Logarithme discret de {h} en base {g} modulo {p} est: {x}")
-
+# Test 1 : cas classique
+p = 13291  # p est premier
+if est_premier(p):
+    g = trouve_generateurs(p)[0]  # premier générateur trouvé
+    h = 5
+    x = baby_step_giant_step(g, h, p)
+    print(f"[Test 1] Log_g({h}) mod {p} = {x}")
 else:
-    print("p n'est pas premier")
+    print("[Test 1] p n'est pas premier")
+
+# Test 2 : petit corps fini
+p = 17  # petit nombre premier
+if est_premier(p):
+    generateurs = trouve_generateurs(p)
+    print(f"[Test 2] Générateurs de F_{p}* : {generateurs}")
+    g = generateurs[0]
+    h = 9
+    x = baby_step_giant_step(g, h, p)
+    print(f"[Test 2] Log_g({h}) mod {p} = {x}")
+else:
+    print("[Test 2] p n'est pas premier")
+
+# Test 3 : cas limite, p n'est pas premier
+p = 15
+if est_premier(p):
+    g = trouve_generateurs(p)[0]
+    h = 4
+    x = baby_step_giant_step(g, h, p)
+    print(f"[Test 3] Log_g({h}) mod {p} = {x}")
+else:
+    print("[Test 3] ERREUR : p n'est pas premier, algorithme invalide.")
+
+# Test 4 : h = 1 (log_g(1) = 0 toujours si g^0 ≡ 1)
+p = 101
+g = trouve_generateurs(p)[0]
+h = 1
+x = baby_step_giant_step(g, h, p)
+print(f"[Test 4] Log_g(1) mod {p} = {x} (doit être 0)")
+
+# Test 5 : h = g (log_g(g) = 1)
+h = g
+x = baby_step_giant_step(g, h, p)
+print(f"[Test 5] Log_g(g) mod {p} = {x} (doit être 1)")
+
+# Test 6 : h non dans le sous-groupe généré
+# Ici, on va volontairement prendre un g qui **n'est pas générateur** et tenter de résoudre log_g(h)
+p = 101
+g = 10  # pas un générateur en général
+if est_generateur(g, p):
+    h = 5
+    x = baby_step_giant_step(g, h, p)
+    print(f"[Test 6] Log_{g}({h}) mod {p} = {x}")
+else:
+    print(f"[Test 6] {g} n'est pas un générateur de F_{p}*, donc le log peut ne pas exister ou être incomplet.")
+
+# Test 7 : grand nombre premier (vérification performance sur taille raisonnable)
+p = 104729  # 10000ème nombre premier
+if est_premier(p):
+    g = trouve_generateurs(p)[0]
+    h = 67890
+    x = baby_step_giant_step(g, h, p)
+    print(f"[Test 7] Log_g({h}) mod {p} = {x}")
+else:
+    print("[Test 7] p n'est pas premier")
