@@ -1,20 +1,22 @@
 import random
 import networkx as nx
 from aes import dechiffrement  
-from AlGamal_OT import Bob_prepare, elgamal_encrypt, elgamal_decrypt, generate_group
+from circuit import generate_max_min_circuit
+from prepa_Alice import alice_prepare_circuit
 from collections import defaultdict
 
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 from Crypto.Util.number import bytes_to_long
 
-def bob_evalue_circuit(G, key_map, garbled_tables):
+def bob_evalue_circuit(G, keys, garbled_tables):
 
     outputs = {}
+
     order = list(nx.topological_sort(G))
 
     for node in order :
-        label = order[node]
+        label = G.nodes[node].get("label") 
 
         preds = list(G.predecessors(node))
 
@@ -25,77 +27,79 @@ def bob_evalue_circuit(G, key_map, garbled_tables):
             preds = list(G.predecessors(node))
             pred = preds[0]
             
-            # Récupère la clé reçue à ce niveau
-            received_key = key_map.get((pred, 0))
-
-            if received_key == key_map.get((node, 0)):
-                outputs[node] = 0
-            elif received_key == key_map.get((node, 1)):
-                outputs[node] = 1
-            else:
-                raise ValueError(f"Impossible de déterminer la sortie du nœud {node}")
+            keys[node] = keys[pred]
             
-        if label in {"AND", "XOR"}:
+        else :
+        
             preds = list(G.predecessors(node))
-
+            found = False
             for gar_bebou in garbled_tables[node]:
-                found = False  # Ce drapeau indique si une combinaison (x, y) a permis un déchiffrement valide
+                  
+                res = gar_bebou
 
-                # On teste toutes les combinaisons possibles des bits d'entrée (x, y) ∈ {0,1} × {0,1}
-                for x in [0, 1]:
-                    for y in [0, 1]:
-                        try:
-                            # Étape 1 : Déchiffrement avec la clé correspondant au second prédécesseur (ordre inverse du chiffrement)
-                            inter = dechiffrement(gar_bebou, key_map[(preds[1], y)])
+                # Étape 1 : Déchiffrement avec la clé correspondant au second prédécesseur (ordre inverse du chiffrement)
+                if label in {"AND", "XOR"}:
+                    res = dechiffrement(gar_bebou, keys[preds[1]])
+                
+                
+                # Étape 2 : Déchiffrement du résultat intermédiaire avec la clé du premier prédécesseur
+                res = dechiffrement(res, keys[preds[0]])
 
-                            # Étape 2 : Déchiffrement du résultat intermédiaire avec la clé du premier prédécesseur
-                            res = dechiffrement(inter, key_map[(preds[0], x)])
+                if not res.startswith(b'MSG:'):
+                    # Si le déchiffrement échoue, on passe à la combinaison suivante
+                    continue
 
-                            # Vérifie si le résultat du double déchiffrement correspond à une des clés attendues en sortie
-                            if res in [key_map[(node, 0)], key_map[(node, 1)]]:
-                                # Calcule la sortie logique de la porte avec les entrées x et y
-                                out = x & y if label == "AND" else x ^ y
+                found = True  # Une combinaison valide a été trouvée
+                break
+                
 
-                                # Enregistre la clé sortie dans key_map pour une utilisation future
-                                key_map[(node, out)] = res
-                                found = True
-                                break  # Sort de la boucle interne sur y
-                        except Exception:
-                            continue  # Ignore les erreurs de déchiffrement (mauvaises clés)
-
-                    if found:
-                        break  # Sort de la boucle externe sur x si on a trouvé une bonne combinaison
-
-                # Si aucune combinaison n'a permis de déchiffrer correctement, on signale une erreur
-                if not found:
-                    raise ValueError(f"Déchiffrement échoué pour la table brouillée du nœud {node}")
-
-
-        elif label == "NOT":
-            # Une porte NOT n'a qu'un seul prédécesseur
-            pred = list(G.predecessors(node))[0]
-
-            found = False  # Drapeau indiquant si un déchiffrement valide a été trouvé
-
-            for x in [0, 1]:  # On teste les deux valeurs possibles de l’entrée
-                try:
-                    # On tente de déchiffrer chaque entrée de la table avec la clé associée à la valeur x du prédécesseur
-                    for garbled_entry in garbled_tables[node]:
-                        res = dechiffrement(garbled_entry, key_map[(pred, x)])
-
-                        # Si le résultat correspond à une des clés de sortie, on a trouvé
-                        if res in [key_map[(node, 0)], key_map[(node, 1)]]:
-                            # La sortie logique d’un NOT est simplement l’inverse de l’entrée
-                            out = 1 - x
-                            key_map[(node, out)] = res
-                            found = True
-                            break  # Sort de la boucle sur garbled_entry
-                    if found:
-                        break  # Sort de la boucle sur x
-                except Exception:
-                    continue  # Ignore les erreurs de déchiffrement (mauvaises clés)
-
+            # Si aucune combinaison n'a permis de déchiffrer correctement, on signale une erreur
             if not found:
-                raise ValueError(f"Déchiffrement échoué pour la porte NOT au nœud {node}")
+                raise ValueError(f"Déchiffrement échoué pour la table brouillée du nœud {node}")
+
+            # On ajoute la clé de sortie à la liste des clés
+            keys[node] = res
+
+    # On récupère les clés de sortie
+    outputs_a_list = [int.from_bytes(keys[node][4:], byteorder="big") for node in G.nodes if G.nodes[node].get("label") == "OUT_A"]
+    outputs_b_list = [int.from_bytes(keys[node][4:], byteorder="big") for node in G.nodes if G.nodes[node].get("label") == "OUT_B"]
+
+    # On convertit les listes de bits en entiers binaires (avec inversion pour poids fort à gauche)
+    outputs_a = sum([1 << i for i, bit in enumerate(reversed(outputs_a_list)) if bit == 1])
+    outputs_b = sum([1 << i for i, bit in enumerate(reversed(outputs_b_list)) if bit == 1])
+
+    print("Résultats de BOB:", outputs_a, outputs_b)
+    return outputs_a, outputs_b
 
         
+if __name__ == "__main__":
+    
+    G, labels = generate_max_min_circuit(2) 
+
+    # Entrée de Alice pour A
+    inputs_a = [0, 1]  # Alice choisit
+
+    # Entrée de Bob pour B
+    inputs_b = [1, 1]  # Bob choisit 
+    
+    keys_a, keys_b, garbled_tables = alice_prepare_circuit(G, labels, inputs_b)
+
+    keys = {}
+    compter_a = 0
+    compter_b = 0
+    
+    for node in G.nodes:
+        label = labels[node]
+
+        # Ne pas envoyer les clés pour les entrées de Bob
+        if label == "IN_A":
+            keys[node] = keys_a[(node, inputs_a[compter_a])]
+            compter_a += 1
+
+        # PROTOCOLE OT
+        elif label == "IN_B":
+            keys[node] = keys_b[(node, inputs_b[0])]
+            compter_b += 1
+
+    # Bob évalue le circuit
+    result = bob_evalue_circuit(G, keys, garbled_tables)

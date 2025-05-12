@@ -44,25 +44,3 @@ def elgamal_decrypt(p, x, c1, c2):
     m = (c2 * s_inv) % p                    # m = c2 / s mod p
     return m
 
-# -----------------------
-# 4. Test du système
-# -----------------------
-if __name__ == "__main__":
-    # Génération des clés
-    public_key, private_key = elgamal_keygen()
-    p, g, y = public_key
-    x = private_key
-
-    # Message à chiffrer
-    message = 123456
-    print("Message original :", message)
-
-    # Chiffrement
-    c1, c2 = elgamal_encrypt(p, g, y, message)
-    print("Chiffrement : c1 =", c1, ", c2 =", c2)
-
-    # Déchiffrement
-    decrypted = elgamal_decrypt(p, x, c1, c2)
-    print("Message déchiffré :", decrypted)
-    
-  
