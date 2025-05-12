@@ -17,6 +17,10 @@ test_alice_prepare.py : Vous pouvez changer les valeurs des inputs, si vous voul
 
 test_elGamal_OT.py : Vous pouvez changer les valeurs de m0 et m1
 
+## Question 3
+Vous pourrez retrouver les détails du code dans le fichier logDiscret.py . Les tests fonctionnel et d'efficacité sont dans le fichier test_logDiscret.py .
+On remarque qu'au dessus de 40 bits, il est difficile d'obtenir un résultat en dessous de 30 secondes. Le protocole OT est donc protégé d'une attaque efficace pour p sur plus de 40 bits.
+
 ## Question 5:
 Nous avons choisi de représenter le circuit sous forme de graphe, avec n entrées et n sorties pour Alice et Bob, et donnant pour chaque sortie le bit du maximum entre les deux entiers comparés.
 Les détails de la construction du graphe se trouvent dans la fonction generate_max_min_circuit(n) au sein du fichier circuit.py, accompagnée de commentaires détaillés.
