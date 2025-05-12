@@ -1,2 +1,3 @@
 #Environnement python propre à la machine de Lucas
 .venv
+__pycache__

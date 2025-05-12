@@ -1,5 +1,6 @@
 from Crypto.Util.number import getPrime, inverse
 import random
+import AlGamal
 
 # genere le groupe 
 def Alice_prepare(bits=256):

@@ -75,6 +75,7 @@ def generate_max_min_circuit(n):
         b_bit = in_b[i]
 
         # pour OUT_A (le maximum)
+        # pour OUT_A (le maximum)
         not_a_greater = f"NOT_A_GREATER_SELECT_{i}"
         labels[not_a_greater] = "NOT"
         G.add_edge(a_greater, not_a_greater)
