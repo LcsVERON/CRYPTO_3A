@@ -1,5 +1,22 @@
 # crypto_3A
 
+## Prerequis
+
+Dans votre terminal entrez la commande : pip insall -r requirements.txt
+Cela vous permetera d'installer toutes les bibliothèques python utilisés
+
+## Execution
+
+Pour lancer les tests  entrez la commande (ou python3 en fonction de votre version): python -m pytest test/
+
+## Executer vos propres test
+
+test_bob_eval.py : Vous pouvez changer les valeurs des inputs, si vous voulez mettre des inputs de taille 3 il faut mettre 3 dans generate_max_min_circuit. De plus il faut actualiser la valeur que dois renvoyer le max dans les assert à la fin
+
+test_alice_prepare.py : Vous pouvez changer les valeurs des inputs, si vous voulez mettre des inputs de taille 3 il faut mettre 3 dans generate_max_min_circuit.
+
+test_elGamal_OT.py : Vous pouvez changer les valeurs de m0 et m1
+
 
 
 ## Getting started
