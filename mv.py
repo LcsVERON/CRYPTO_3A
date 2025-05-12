@@ -153,100 +153,121 @@ class VirtualMachine:
         if side == "A":
             return self.alice_vars.get(var_name, 0)
         elif side == "B":
-            return self.bob_vars.get(var_name, 0)
+            return self.bob_vars.get(var_name, 0)        
 
 
-def compiler(circuit):
+def compiler(circuit, labels):
     alice_code = []
     bob_code = []
-    k=0
-    j=0
+    var_counter = 0
+    
+    def new_var(prefix):
+        nonlocal var_counter
+        var_name = f"{prefix}{var_counter}"
+        var_counter += 1
+        return var_name
+    
+    def in_idx(node_id, x_type):
+        # On parcourt les prédécesseurs du nœud jusqu'à trouver un noeud avec le label "IN_X"
+        for pred in reversed(list(circuit.predecessors(node_id))):
+            if labels[pred] == f"IN_{x_type}":
+                return pred
+        return None  # Si aucun prédécesseur avec le label "IN_X" n'est trouvé avant node_id
+        
+        
 
-    for node_id in circuit:
-        node = circuit[node_id]
-        label = node["label"]
+    for node_id in nx.topological_sort(circuit):
+        label = labels[node_id]
+        predecessors = list(circuit.predecessors(node_id))  #on récupère les prédécesseurs du noeud
+
+        #on écupère l'ID des noeuds prédécesseurs
+        predecessor_ids = [pred for pred in predecessors]
     
         if label.startswith("IN_A"):
-            rnd = f"xA{8}"
-            masked = f"xA{9}"
+            rnd = new_var("t")
+            masked = new_var("t")
             alice_code += [
                 f"{rnd} = rnd()",
-                f"{masked} = {rnd} + xA{2+k*20}",
+                f"{masked} = {rnd} + xA{node_id}",
                 f"push({masked})",
-                f"xA{2+k*20} = {rnd}"
+                f"xA{node_id} = {rnd}"
             ]
             bob_code += [
-                f"xB{2} = pop()"
+                f"xB{node_id} = pop()"
             ]
 
         elif label.startswith("IN_B"):
-            rnd = f"xB{8}"
-            masked = f"xB{9}"
+            rnd = new_var("t")
+            masked = new_var("t")
             bob_code += [
                 f"{rnd} = rnd()",
-                f"{masked} = {rnd} + xB{1+j*20}",
+                f"{masked} = {rnd} + xB{node_id}",
                 f"push({masked})",
-                f"xB{1+j*20} = {rnd}"
+                f"xB{node_id} = {rnd}"
             ]
             alice_code += [
-                f"xA{1} = pop()"
+                f"xA{node_id} = pop()"
             ]
             
         elif label.startswith("AND"):
+            
+            t1 = new_var("t")
+            t2 = new_var("t")
+            t3 = new_var("t")
+            t4 = new_var("t")
+            t5 = new_var("t")
             bob_code += [
-                f"xB{8} = rnd()",
-                f"xB{9} = rnd()",
-                f"xB{10} = xB{8} + xB{1+j*20}",
-                f"xB{11} = xB{9} + xB{2}",
-                f"push(xB{8}, xB{10}, xB{9}, xB{11})",
-                f"xB{8} = xB{8} + xB{9}",
-                f"xB{4} = xB{1} * xB{2}",
-                f"xB{4} = xB{4} * xB{8}"
+                f"{t1} = rnd()",
+                f"{t2} = rnd()",
+                f"{t3} = {t1} + xB{predecessor_ids[1]}",
+                f"{t4} = {t2} + xB{in_idx(node_id, "B")}",
+                f"push({t1}, {t3}, {t2}, {t4})",
+                f"{t1} = {t1} + {t2}",
+                f"xB{node_id} = xB{predecessor_ids[1]} * xB{in_idx(node_id, "B")}",
+                f"xB{node_id} = xB{node_id} * {t1}"
             ]
             alice_code += [
-                f"xA{4} = pop(xA{1}, xA{2})",
-                f"xA{8} = xA{1} * xA{2}",
-                f"xA{4} = xA{8} + xA{4}",
+                f"xA{node_id} = pop({t5}, xA{predecessor_ids[0]})",
+                f"{t1} = {t5} * xA{predecessor_ids[0]}",
+                f"xA{node_id} = {t1} + xA{node_id}",
             ]
 
         elif label.startswith("NOT"):
             bob_code += [
-                f"xB{3} = xB{1} + 1"
+                f"xB{node_id} = xB{predecessor_ids[0]} + 1"
             ]
             alice_code += [
-                f"xA{3} = xA{1}"
+                f"xA{node_id} = xA{predecessor_ids[0]}"
             ]
 
         elif label.startswith("XOR"):
             alice_code += [
-                f"xA{5} = xA{3} + xA{4}"
+                f"xA{node_id} = xA{predecessor_ids[0]} + xA{predecessor_ids[1]}",
             ]
             bob_code += [
-                f"xB{5} = xB{3} + xB{4}"
+                f"xB{node_id} = xB{predecessor_ids[0]} + xB{predecessor_ids[1]}",
             ]
 
 
         elif label.startswith("OUT_A"):
             alice_code += [
-                f"xA{7} = pop()",
-                f"xA{7+20*k} = xA{5} + xA{7}"
+                f"xA{node_id} = pop()",
+                f"xA{node_id} = xA{predecessor_ids[0]} + xA{node_id}"
             ]
             bob_code += [
-                f"push(xB{5})",
-                f"xB{7} = xB{5}"
+                f"push(xB{predecessor_ids[0]})",
+                f"xB{node_id} = xB{predecessor_ids[0]}"
             ]
-            k+=1 
 
         elif label.startswith("OUT_B"):
             bob_code += [
-                f"xB{6} = pop()",
-                f"xB{6} = xB{5} + xB{6}"
+                f"xB{node_id} = pop()",
+                f"xB{node_id} = xB{predecessor_ids[0]} + xB{node_id}"
             ]
             alice_code += [
-                f"push(xA{5})",
-                f"xA{6+20*j} = xA{5}"
+                f"push(xA{predecessor_ids[0]})",
+                f"xA{node_id} = xA{predecessor_ids[0]}"
             ]
-            j+=1
 
     alice_structured = [parse_line(line) for line in alice_code]
     bob_structured = [parse_line(line) for line in bob_code]
@@ -293,25 +314,6 @@ def parse_line(line):
     raise ValueError(f"Unsupported line: {line}")
 
 
-
-def extract_circuit(G, labels):
-    circuit = {}
-    node_map = {}  # mapping from graph node name (string) to integer index
-    sorted_nodes = list(G)
-
-    # assign integer node ids
-    for i, node in enumerate(sorted_nodes):
-        node_map[node] = i
-
-    for i, node in enumerate(sorted_nodes):
-        label = labels[node]
-        preds = list(G.predecessors(node))
-        pred_indices = [node_map[p] for p in preds]
-        circuit[i] = {"label": label, "in": pred_indices}
-    
-    return circuit
-
-
 # Exemple d'utilisation avec les circuits
 n=1
 G, labels = circuit.generate_max_min_circuit(n)
@@ -319,22 +321,23 @@ print("Labels du circuit :")
 for node, label in labels.items():
     print(f"{node}: {label}")
 
-circuit_test = extract_circuit(G, labels)
-
 a = 1 
 b = 0
 
 a_bits = circuit.int_to_bits(a, n)
 b_bits = circuit.int_to_bits(b, n)
 
-alice_code, bob_code = compiler(circuit_test)
+alice_code, bob_code = compiler(G, labels)
 
 
 vm = VirtualMachine(alice_code, bob_code)
 
-for i in range(n):
-    vm.set_variable("A", f"xA{2+20*i}", a_bits[i])
-    vm.set_variable("B", f"xB{1+20*i}", b_bits[i])
+for node_id in nx.topological_sort(G):
+    label = labels[node_id]
+    if label.startswith("IN_A"):
+        vm.set_variable("A", f"xA{node_id}", a_bits.pop(0))
+    elif label.startswith("IN_B"):
+        vm.set_variable("B", f"xB{node_id}", b_bits.pop(0))
 
 
 # Exécution du programme
@@ -345,12 +348,16 @@ print(vm.alice_vars)
 print("Variables de Bob :")
 print(vm.bob_vars)
 
-out_a_bits = [0] * n
-out_b_bits = [0] * n
+out_a_bits = []
+out_b_bits = []
 
-for i in range(n):
-    out_a_bits[i] = vm.get_variable("A", f"xA{7+20*i}")
-    out_b_bits[i] = vm.get_variable("B", f"xB{6+20*i}")
+for node_id in nx.topological_sort(G):
+    label = labels[node_id]
+    if label.startswith("OUT_A"):
+        out_a_bits.append(vm.get_variable("A", f"xA{node_id}"))
+        print(vm.get_variable("A", f"xA{node_id}"))
+    elif label.startswith("OUT_B"):
+        out_b_bits.append(vm.get_variable("B", f"xB{node_id}"))
 
 
 out_a = circuit.bits_to_int(out_a_bits)
