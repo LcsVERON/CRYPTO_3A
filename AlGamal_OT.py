@@ -43,31 +43,4 @@ def elgamal_decrypt(p,a,B,c, as_bytes=False, byte_length=16):
     else:
         return m
 
-if __name__ == "__main__":
-    # Alice choisit les paramètres du groupe
-    p, g, C = Alice_prepare()
-
-    # Alice choisit ses deux messages
-    m0 = 4321
-    m1 = 9876
-
-    # Bob choisit un bit b (0 ou 1)
-    b = 0  # il veut recevoir m1
-
-    # Bob prépare les clés à envoyer à Alice, un des deux est une "fausse clé" (une dont il ne connait pas la clé privé)
-    a, A0, A1 = Bob_prepare(p, g, C, b)
-
-    # Alice chiffre les deux messages avec A0 et A1
-    c0, c1 = elgamal_encrypt(p, g, A0, A1, m0, m1)
-
-    # Bob déchiffre seulement le message qu’il a choisi
-    c_b = c0 if b == 0 else c1
-    recu = elgamal_decrypt(p, a, c_b[0], c_b[1])
-
-    print(f"Bob a choisi b = {b}")
-    print(f"Message reçu par Bob : {recu}")
-    print(f"Message attendu : {m0 if b == 0 else m1}")
-    print("✅ Succès" if recu == (m0 if b == 0 else m1) else "❌ Erreur")
-    
-    
     

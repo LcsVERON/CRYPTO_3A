@@ -37,16 +37,3 @@ def baby_step_giant_step(g, h, p):
         grand_pas = (grand_pas * g_t_inv) % p #sinon, on actualise grand pas en le multipliant par g^-t
         
     return None  #si aucune solution trouvée
-
-#tests sur le logarithme discret
-p = 13291 #cardinal du corps fini
-g = trouve_generateurs(p)[0] #générateur (base)
-h = 5 #élément dont on cherche le log discret base g mod p
-
-x = baby_step_giant_step(g, h, p)
-
-if (est_premier(p)):
-    print(f"Logarithme discret de {h} en base {g} modulo {p} est: {x}")
-
-else:
-    print("p n'est pas premier")

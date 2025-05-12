@@ -1,3 +1,4 @@
+
 import cryptography
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -73,23 +74,22 @@ def dechiffrement(ciphertext: bytes, key: bytes) -> bytes:
     
     # 3. Retirer le padding si nécessaire
     plaintext = b''.join(decrypted_blocks).rstrip(b'\x00')
-
-    #if not plaintext.startswith(b'MSG:'):raise ValueError("Le texte déchiffré semble invalide (entête manquante)")
-
+    
     return plaintext
 
 
-# Exemple d'utilisation
-key = os.urandom(16)  # Clé secrète de 16 octets
-message_b = b"Hello, this is a test message!" # b pour preciser en bytes
+if __name__ == "__main__":
+    # Exemple d'utilisation
+    key = os.urandom(16)  # Clé secrète de 16 octets
+    message_b = b"Hello, this is a test message!" # b pour preciser en bytes
 
-message = "Hello, this is a test message!"
-print("Texte de base :", message)
+    message = "Hello, this is a test message!"
+    print("Texte de base :", message)
 
-ciphertext = chiffrement(message_b, key)
-print("Texte chiffré :", ciphertext.hex())
+    ciphertext = chiffrement(message_b, key)
+    print("Texte chiffré :", ciphertext.hex())
 
-plaintext = dechiffrement(ciphertext, key)
-print("Texte déchiffré :", plaintext.decode())
+    plaintext = dechiffrement(ciphertext, key)
+    print("Texte déchiffré :", plaintext.decode())
 
-    
+    # 
