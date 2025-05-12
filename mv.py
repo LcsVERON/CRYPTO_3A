@@ -52,13 +52,13 @@ class VirtualMachine:
             self.finished = True
             self.alice_waiting = False
             self.bob_waiting = False
-
-            if self.alice_pc < len(self.alice_code):
-                self.step_alice()
-                self.finished = False
-
+            
             if self.bob_pc < len(self.bob_code):
                 self.step_bob()
+                self.finished = False
+                            
+            if self.alice_pc < len(self.alice_code):
+                self.step_alice()
                 self.finished = False
 
             if self.alice_waiting and self.bob_waiting:
@@ -66,8 +66,6 @@ class VirtualMachine:
                 break
 
     def step_alice(self):
-        #print(self.alice_pc)
-        #print(len(self.alice_code))
         if self.alice_pc >= len(self.alice_code):
             return
         cmd = self.alice_code[self.alice_pc]
@@ -83,7 +81,7 @@ class VirtualMachine:
         if not self.bob_waiting:
             self.bob_pc += 1
 
-    def execute_command(self, cmd, vars, side="alice"):
+    def execute_command(self, cmd, vars, side="bob"):
         op = cmd["op"]
 
         if op == "assign":
@@ -157,76 +155,98 @@ class VirtualMachine:
         elif side == "B":
             return self.bob_vars.get(var_name, 0)
 
+
 def compiler(circuit):
     alice_code = []
     bob_code = []
-    temp_id = 0
-
-    def fresh():
-        nonlocal temp_id
-        temp_id += 1
-        return f"t{temp_id}"
+    k=0
+    j=0
 
     for node_id in circuit:
         node = circuit[node_id]
         label = node["label"]
-        inputs = node["in"]
-
+    
         if label.startswith("IN_A"):
-            rnd = fresh()
-            masked = fresh()
-            alice_code.extend([
+            rnd = f"xA{8}"
+            masked = f"xA{9}"
+            alice_code += [
                 f"{rnd} = rnd()",
-                f"{masked} = {rnd} + xA{node_id}",
+                f"{masked} = {rnd} + xA{2+k*20}",
                 f"push({masked})",
-                f"xA{node_id} = {rnd}"
-            ])
-            bob_code.append(f"xB{node_id} = pop()")
+                f"xA{2+k*20} = {rnd}"
+            ]
+            bob_code += [
+                f"xB{2} = pop()"
+            ]
 
         elif label.startswith("IN_B"):
-            rnd = fresh()
-            masked = fresh()
-            bob_code.extend([
+            rnd = f"xB{8}"
+            masked = f"xB{9}"
+            bob_code += [
                 f"{rnd} = rnd()",
-                f"{masked} = {rnd} + xB{node_id}",
+                f"{masked} = {rnd} + xB{1+j*20}",
                 f"push({masked})",
-                f"xB{node_id} = {rnd}"
-            ])
-            alice_code.append(f"xA{node_id} = pop()")
+                f"xB{1+j*20} = {rnd}"
+            ]
+            alice_code += [
+                f"xA{1} = pop()"
+            ]
+            
+        elif label.startswith("AND"):
+            bob_code += [
+                f"xB{8} = rnd()",
+                f"xB{9} = rnd()",
+                f"xB{10} = xB{8} + xB{1+j*20}",
+                f"xB{11} = xB{9} + xB{2}",
+                f"push(xB{8}, xB{10}, xB{9}, xB{11})",
+                f"xB{8} = xB{8} + xB{9}",
+                f"xB{4} = xB{1} * xB{2}",
+                f"xB{4} = xB{4} * xB{8}"
+            ]
+            alice_code += [
+                f"xA{4} = pop(xA{1}, xA{2})",
+                f"xA{8} = xA{1} * xA{2}",
+                f"xA{4} = xA{8} + xA{4}",
+            ]
 
-        elif label.startswith ("NOT"):
-            alice_code.append(f"xA{node_id} = xA{inputs[0]} + 1")
-            bob_code.append(f"xB{node_id} = xB{inputs[0]}")
+        elif label.startswith("NOT"):
+            bob_code += [
+                f"xB{3} = xB{1} + 1"
+            ]
+            alice_code += [
+                f"xA{3} = xA{1}"
+            ]
 
-        elif label.startswith ("XOR"):
-            alice_code.append(f"xA{node_id} = xA{inputs[0]} + xA{inputs[1]}")
-            bob_code.append(f"xB{node_id} = xB{inputs[0]} + xB{inputs[1]}")
+        elif label.startswith("XOR"):
+            alice_code += [
+                f"xA{5} = xA{3} + xA{4}"
+            ]
+            bob_code += [
+                f"xB{5} = xB{3} + xB{4}"
+            ]
 
-        elif label.startswith ("AND"):
-            xA, yA = f"xA{inputs[0]}", f"xA{inputs[1]}"
-            xB, yB = f"xB{inputs[0]}", f"xB{inputs[1]}"
-            r1, r2 = fresh(), fresh()
-            m1, m2 = fresh(), fresh()
-            alice_code.extend([
-                f"{r1} = rnd()",
-                f"{r2} = rnd()",
-                f"{m1} = {r1} + {xA}",
-                f"{m2} = {r2} + {yA}",
-                f"push({r1}, {m1}, {r2}, {m2})",
-                f"xA{node_id} = {xA} * {yA} + {r1} + {r2}"
-            ])
-            bob_code.extend([
-                f"xB{node_id} = pop({xB}, {yB})",
-                f"xB{node_id} = {xB} * {yB} + xB{node_id}"
-            ])
 
         elif label.startswith("OUT_A"):
-            alice_code.append(f"xA{node_id} = pop()")
-            bob_code.append(f"push(xB{inputs[0]})")
+            alice_code += [
+                f"xA{7} = pop()",
+                f"xA{7+20*k} = xA{5} + xA{7}"
+            ]
+            bob_code += [
+                f"push(xB{5})",
+                f"xB{7} = xB{5}"
+            ]
+            k+=1 
 
         elif label.startswith("OUT_B"):
-            bob_code.append(f"xB{node_id} = pop()")
-            alice_code.append(f"push(xA{inputs[0]})")
+            bob_code += [
+                f"xB{6} = pop()",
+                f"xB{6} = xB{5} + xB{6}"
+            ]
+            alice_code += [
+                f"push(xA{5})",
+                f"xA{6+20*j} = xA{5}"
+            ]
+            j+=1
 
     alice_structured = [parse_line(line) for line in alice_code]
     bob_structured = [parse_line(line) for line in bob_code]
@@ -272,13 +292,25 @@ def parse_line(line):
         return {"op": "assign", "dest": dest.strip(), "expr": parse_expr(expr)}
     raise ValueError(f"Unsupported line: {line}")
 
+
+
 def extract_circuit(G, labels):
     circuit = {}
-    for i, node in enumerate(nx.topological_sort(G)):
+    node_map = {}  # mapping from graph node name (string) to integer index
+    sorted_nodes = list(G)
+
+    # assign integer node ids
+    for i, node in enumerate(sorted_nodes):
+        node_map[node] = i
+
+    for i, node in enumerate(sorted_nodes):
         label = labels[node]
         preds = list(G.predecessors(node))
-        circuit[i] = {"label": label, "in": preds}
+        pred_indices = [node_map[p] for p in preds]
+        circuit[i] = {"label": label, "in": pred_indices}
+    
     return circuit
+
 
 # Exemple d'utilisation avec les circuits
 n=1
@@ -289,26 +321,20 @@ for node, label in labels.items():
 
 circuit_test = extract_circuit(G, labels)
 
-alice_code, bob_code = compiler(circuit_test)
-
 a = 1 
 b = 0
 
 a_bits = circuit.int_to_bits(a, n)
 b_bits = circuit.int_to_bits(b, n)
 
-vm = VirtualMachine(bob_code, alice_code)
+alice_code, bob_code = compiler(circuit_test)
 
-# Initialisation des variables pour Alice et Bob
-alice_input_nodes = [i for i, data in circuit_test.items() if data["label"] == "IN_A"]
-bob_input_nodes = [i for i, data in circuit_test.items() if data["label"] == "IN_B"]
 
-# Associer les bits aux bons indices de nœuds d'entrée
-for idx, node in enumerate(alice_input_nodes):
-    vm.set_variable("A", f"xA{node}", a_bits[idx])  # On associe le bit avec le bon nœud d'entrée pour Alice
+vm = VirtualMachine(alice_code, bob_code)
 
-for idx, node in enumerate(bob_input_nodes):
-    vm.set_variable("B", f"xB{node}", b_bits[idx])  # On associe le bit avec le bon nœud d'entrée pour Bob
+for i in range(n):
+    vm.set_variable("A", f"xA{2+20*i}", a_bits[i])
+    vm.set_variable("B", f"xB{1+20*i}", b_bits[i])
 
 
 # Exécution du programme
@@ -319,11 +345,12 @@ print(vm.alice_vars)
 print("Variables de Bob :")
 print(vm.bob_vars)
 
-out_a_nodes = [i for i, data in circuit_test.items() if data["label"] == "OUT_A"]
-out_b_nodes = [i for i, data in circuit_test.items() if data["label"] == "OUT_B"]
+out_a_bits = [0] * n
+out_b_bits = [0] * n
 
-out_a_bits = [vm.get_variable("A", f"xA{i}") for i in out_a_nodes]
-out_b_bits = [vm.get_variable("B", f"xB{i}") for i in out_b_nodes]
+for i in range(n):
+    out_a_bits[i] = vm.get_variable("A", f"xA{7+20*i}")
+    out_b_bits[i] = vm.get_variable("B", f"xB{6+20*i}")
 
 
 out_a = circuit.bits_to_int(out_a_bits)
