@@ -28,3 +28,4 @@ Le fichier test_circuit.py contient le test exhaustif. Les détails du code sont
 ## Question 7:
 Les détails de la strcuture de la machine virtuelle se trouvent dans le fichier mv.py . Il en est de même pour la fonction de compilation.
 Concernant les test, malheureusement nous ne sommes pas parvenus à une version concluante. Les test ne passent pas car il y a sûrement une erreur dans la compréhension du sujet, ce qui provoque des calculs de variables faussés, qui donnent une sortie erronée.
+Vous pouvez tout de même effectuer un test en compilant mv.py et qui vous affiche le résultat attendu sur un bit.
