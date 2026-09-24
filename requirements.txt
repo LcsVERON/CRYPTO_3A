@@ -1,4 +1,3 @@
-cryptography
-pycryptodome
 networkx
-pytest
+pycryptodome
+pytest>=7

@@ -1,0 +1,20 @@
+[project]
+name = "crypto3a"
+version = "1.0.0"
+description = "Secure two-party computation of the maximum of two integers: Yao garbled circuit and secret-sharing virtual machine."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "networkx",
+    "pycryptodome",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["crypto3a"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
