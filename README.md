@@ -13,9 +13,9 @@ Both rely on the same boolean circuit computing the maximum.
 
 ## Project history
 
-This project started as a group assignment in the 3rd year of engineering
-school. In 2026 I took it over on my own to finish it: fixing the remaining
-bugs (notably the Question 7 virtual machine and the bit order of the
+This project started as a group assignment in the 3rd year of my double bachelor 
+degree in mathematics and computer science. In 2026 I took it over on my own to finish it: 
+fixing the remainingbugs (notably the Question 7 virtual machine and the bit order of the
 garbled circuit), reorganising the code into a package, extending the tests
 and writing the documentation.
 
